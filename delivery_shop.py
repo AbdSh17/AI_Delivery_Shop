@@ -4,8 +4,8 @@ import pandas as pd
 import os
 
 # ============================ Global ============================
+# read each CSV file, add a new CSV file if not exist then read it
 
-# add
 vehicles = pd.read_csv('vehicles.csv') if os.path.exists('vehicles.csv') else pd.DataFrame(
     columns=['vehicle_id', 'capacity', 'is_available']).to_csv('vehicles.csv', index=False)
 
@@ -13,6 +13,7 @@ packages = pd.read_csv("packages.csv") if os.path.exists('packages.csv') else pd
     columns=['package_id', 'dest_x', 'dest_y', 'weight', 'priority', 'is_delivered']).to_csv('packages.csv', index=False)
 # ============================ Global ============================
 
+# a function to add a new package
 def add_package():
     global packages
     try:
@@ -53,6 +54,7 @@ def add_package():
         print("Please enter an Priority as an Integer\n")
         return False
 
+    # do a new pandas with its attributes
     new_package = pd.DataFrame({
         "package_id": [f"p{str(pack_id)}"],
         "dest_x": [dest_x],
@@ -61,19 +63,25 @@ def add_package():
         "priority": [priority],
         "is_delivered": [False]
     })
+
+    # concat the two pandas
     packages = pd.concat([packages, new_package], ignore_index=True)
     packages.to_csv("packages.csv", index= False)
     return True
 
+# a function to drop a package
 def drop_package(pack_id):
     global packages
+
+    # if the package not found
     if pack_id not in packages["package_id"].values:
         return False
 
-    packages = packages[packages["package_id"] != pack_id]
-    packages.to_csv("packages.csv", index= False)
+    packages = packages[packages["package_id"] != pack_id] # add every pack except the one with ID 'px'
+    packages.to_csv("packages.csv", index= False) # overwrite the file
     return True
 
+# a function to add a new vehicle
 def add_vehicle():
     global vehicles
     try:
@@ -96,6 +104,7 @@ def add_vehicle():
     vehicles.to_csv("vehicles.csv", index= False)
     return True
 
+# a function to drop a vehicle
 def drop_vehicle(vehicle_id):
     global vehicles
     if vehicle_id not in vehicles["vehicle_id"].values:
@@ -105,7 +114,19 @@ def drop_vehicle(vehicle_id):
     vehicles.to_csv("vehicles.csv", index= False)
     return True
 
+# ===================================== GOOOOOO HEREEEEE # =====================================
+def GA():
+    # wish you a good luck (:
+    available_packages = packages[packages["is_delivered"] == False].to_dict()
+    available_vehicles = vehicles[vehicles["is_available"] == True].to_dict()
+
+    print(available_packages)
+    print(available_vehicles)
+
+
 if __name__ == '__main__':
+
+    GA()
 
     while True:
         print("\n1. Add package\n2. Drop package\n3. Add vehicle\n4. Drop vehicle\n5. Break")
