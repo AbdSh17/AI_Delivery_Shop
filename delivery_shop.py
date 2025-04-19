@@ -105,9 +105,6 @@ def drop_vehicle(vehicle_id):
 
 if __name__ == '__main__':
 
-    print("p1" in packages["package_id"].values)
-    print(packages["package_id"].index)
-
     while True:
         print("\n1. Add package\n2. Drop package\n3. Add vehicle\n4. Drop vehicle\n5. Break")
         choice = input("Choose (1 or 2): ")
