@@ -7,10 +7,10 @@ import os
 
 # add
 vehicles = pd.read_csv('vehicles.csv') if os.path.exists('vehicles.csv') else pd.DataFrame(
-    columns=['vehicle_id', 'capacity']).to_csv('vehicles.csv', index=False)
+    columns=['vehicle_id', 'capacity', 'is_available']).to_csv('vehicles.csv', index=False)
 
 packages = pd.read_csv("packages.csv") if os.path.exists('packages.csv') else pd.DataFrame(
-    columns=['package_id', 'dest_x', 'dest_y', 'weight', 'priority']).to_csv('packages.csv', index=False)
+    columns=['package_id', 'dest_x', 'dest_y', 'weight', 'priority', 'is_delivered']).to_csv('packages.csv', index=False)
 # ============================ Global ============================
 
 def add_package():
