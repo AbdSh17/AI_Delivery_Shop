@@ -1,19 +1,42 @@
-from operator import index
-
 import pandas as pd
 import os
+import PySimpleGUI as sg
+
+# ============================ Dark Violet Theme ============================
+dark_violet_theme = {
+    'BACKGROUND': '#1E1E1E',      # Dark gray background
+    'TEXT': '#E0E0E0',            # Light gray text
+    'INPUT': '#3A3A3A',           # Dark charcoal input fields
+    'TEXT_INPUT': '#FFFFFF',      # White text in inputs
+    'BUTTON': ('white', '#720e9e'),  # White text on dark violet
+    'BUTTON_HOVER': ('white', '#4A148C'),  # Lighter violet on hover
+    'PROGRESS': ('#720e9e', '#1E1E1E'),
+    'BORDER': 1,
+    'SCROLL': '#4A148C',
+    'SLIDER_DEPTH': 0,
+    'PROGRESS_DEPTH': 0,
+    'COLOR_LIST': ['#1E1E1E', '#720e9e', '#3A3A3A']
+}
+
+sg.theme_add_new('DarkVioletTheme', dark_violet_theme)
+sg.theme('DarkVioletTheme')
+# =============================================================================
 
 # ============================ Global ============================
-# read each CSV file, add a new CSV file if not exist then read it
+# Initialize dataframes
+if os.path.exists('vehicles.csv'):
+    vehicles = pd.read_csv('vehicles.csv')
+else:
+    vehicles = pd.DataFrame(columns=['vehicle_id', 'capacity', 'is_available'])
+    vehicles.to_csv('vehicles.csv', index=False)
 
-vehicles = pd.read_csv('vehicles.csv') if os.path.exists('vehicles.csv') else pd.DataFrame(
-    columns=['vehicle_id', 'capacity', 'is_available']).to_csv('vehicles.csv', index=False)
-
-packages = pd.read_csv("packages.csv") if os.path.exists('packages.csv') else pd.DataFrame(
-    columns=['package_id', 'dest_x', 'dest_y', 'weight', 'priority', 'is_delivered']).to_csv('packages.csv', index=False)
+if os.path.exists('packages.csv'):
+    packages = pd.read_csv('packages.csv')
+else:
+    packages = pd.DataFrame(columns=['package_id', 'dest_x', 'dest_y', 'weight', 'priority', 'is_delivered'])
+    packages.to_csv('packages.csv', index=False)
 # ============================ Global ============================
 
-# a function to add a new package
 def add_package():
     global packages
     try:
@@ -21,67 +44,83 @@ def add_package():
     except Exception:
         pack_id = 1
 
-    try:
-        dest_x = int(input("\nEnter X (0-100): "))
-        if not 0 <= dest_x <= 100:
-            print("Please 0 <= X <= 100\n")
-            return False
-    except Exception:
-        print("Please enter an Destination as an Integer\n")
-        return False
+    layout = [
+        [sg.Text('📦 Add New Package', font=('Arial', 14))],
+        [sg.Text('X Coordinate (0-100):'), sg.Input(key='-X-', size=(10, 1))],
+        [sg.Text('Y Coordinate (0-100):'), sg.Input(key='-Y-', size=(10, 1))],
+        [sg.Text('Weight (kg):'), sg.Input(key='-WEIGHT-', size=(10, 1))],
+        [sg.Text('Priority (1-5):'), sg.Input(key='-PRIORITY-', size=(10, 1))],
+        [sg.Button('Submit'), sg.Button('Cancel')]
+    ]
 
-    try:
-        dest_y = int(input("\nEnter Y (0 - 100): "))
-        if not 0 <= dest_y <= 100:
-            print("Please 0 <= Y <= 100\n")
-            return False
-    except Exception:
-        print("Please enter an Destination as an Integer\n")
-        return False
+    window = sg.Window('Add Package', layout, modal=True, element_padding=(10, 10))
 
-    try:
-        weight = int(input("\nEnter the Weight: "))
-    except Exception:
-        print("Please enter an Weight as an Integer\n")
-        return False
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, 'Cancel'):
+            break
+        if event == 'Submit':
+            try:
+                x = int(values['-X-'])
+                y = int(values['-Y-'])
+                weight = int(values['-WEIGHT-'])
+                priority = int(values['-PRIORITY-'])
 
-    try:
-        priority = int(input("\nEnter The priority (1-5): "))
-        if not 1 <= priority <= 5:
-            print("Please enter a priority between 1-5\n")
-            return False
-    except Exception:
-        print("Please enter an Priority as an Integer\n")
-        return False
+                if not (0 <= x <= 100 and 0 <= y <= 100):
+                    sg.popup_error('Coordinates must be between 0-100', title='Error')
+                    continue
+                if not 1 <= priority <= 5:
+                    sg.popup_error('Priority must be between 1-5', title='Error')
+                    continue
 
-    # do a new pandas with its attributes
-    new_package = pd.DataFrame({
-        "package_id": [f"p{str(pack_id)}"],
-        "dest_x": [dest_x],
-        "dest_y": [dest_y],
-        "weight": [weight],
-        "priority": [priority],
-        "is_delivered": [False]
-    })
+                new_package = pd.DataFrame({
+                    "package_id": [f"p{pack_id}"],
+                    "dest_x": [x],
+                    "dest_y": [y],
+                    "weight": [weight],
+                    "priority": [priority],
+                    "is_delivered": [False]
+                })
 
-    # concat the two pandas
-    packages = pd.concat([packages, new_package], ignore_index=True)
-    packages.to_csv("packages.csv", index= False)
-    return True
+                packages = pd.concat([packages, new_package], ignore_index=True)
+                packages.to_csv("packages.csv", index=False)
+                sg.popup(f'✅ Package p{pack_id} added successfully!', title='Success')
+                break
+            except ValueError:
+                sg.popup_error('Please enter valid numbers', title='Error')
 
-# a function to drop a package
-def drop_package(pack_id):
+    window.close()
+
+def drop_package():
     global packages
+    if packages.empty:
+        sg.popup('⚠️ No packages available', title='Info')
+        return
 
-    # if the package not found
-    if pack_id not in packages["package_id"].values:
-        return False
+    layout = [
+        [sg.Text('🗑️ Drop Package', font=('Arial', 14))],
+        [sg.Text('Enter Package ID (e.g., p1):'), sg.Input(key='-ID-')],
+        [sg.Button('Submit'), sg.Button('Cancel')]
+    ]
 
-    packages = packages[packages["package_id"] != pack_id] # add every pack except the one with ID 'px'
-    packages.to_csv("packages.csv", index= False) # overwrite the file
-    return True
+    window = sg.Window('Drop Package', layout, modal=True, element_padding=(10, 10))
 
-# a function to add a new vehicle
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, 'Cancel'):
+            break
+        if event == 'Submit':
+            pack_id = values['-ID-'].strip()
+            if pack_id in packages["package_id"].values:
+                packages = packages[packages["package_id"] != pack_id]
+                packages.to_csv("packages.csv", index=False)
+                sg.popup(f'✅ Package {pack_id} removed', title='Success')
+                break
+            else:
+                sg.popup_error('❌ Invalid package ID', title='Error')
+
+    window.close()
+
 def add_vehicle():
     global vehicles
     try:
@@ -89,68 +128,134 @@ def add_vehicle():
     except Exception:
         vehicle_id = 1
 
-    try:
-        capacity = int(input("\nEnter capacity: "))
-    except Exception:
-        print("Please enter an capacity as an Integer\n")
-        return False
+    layout = [
+        [sg.Text('🚛 Add New Vehicle', font=('Arial', 14))],
+        [sg.Text('Capacity (kg):'), sg.Input(key='-CAPACITY-', size=(10, 1))],
+        [sg.Button('Submit'), sg.Button('Cancel')]
+    ]
 
-    new_vehicle = pd.DataFrame({
-        "vehicle_id": [f"v{str(vehicle_id)}"],
-        "capacity": [capacity],
-        "is_available": [True]
-    })
-    vehicles = pd.concat([vehicles, new_vehicle], ignore_index=True)
-    vehicles.to_csv("vehicles.csv", index= False)
-    return True
-
-# a function to drop a vehicle
-def drop_vehicle(vehicle_id):
-    global vehicles
-    if vehicle_id not in vehicles["vehicle_id"].values:
-        return False
-
-    vehicles = vehicles[vehicles["vehicle_id"] != vehicle_id]
-    vehicles.to_csv("vehicles.csv", index= False)
-    return True
-
-# ===================================== GOOOOOO HEREEEEE # =====================================
-def GA():
-    # wish you a good luck (:
-    available_packages = packages[packages["is_delivered"] == False].to_dict()
-    available_vehicles = vehicles[vehicles["is_available"] == True].to_dict()
-
-    print(available_packages)
-    print(available_vehicles)
-
-
-if __name__ == '__main__':
-
-    GA()
+    window = sg.Window('Add Vehicle', layout, modal=True, element_padding=(10, 10))
 
     while True:
-        print("\n1. Add package\n2. Drop package\n3. Add vehicle\n4. Drop vehicle\n5. Break")
-        choice = input("Choose (1 or 2): ")
-        if choice == '1':
-            print(packages)
-            print(packages) if add_package() else print("Failed to add the package")
-
-        elif choice == '2':
-            print(packages)
-            pack_id = input("\nEnter pack ID: ")
-            print(packages) if drop_package(pack_id) else print("Failed to drop the package")
-
-        elif choice == '3':
-            print(vehicles)
-            print(vehicles) if add_vehicle() else print("Failed to add the Vehicle")
-
-        elif choice == '4':
-            print(vehicles)
-            vehicle_id = input("\nEnter pack ID: ")
-            print(vehicles) if drop_vehicle(vehicle_id) else print("Failed to drop the vehicle")
-
-
-        elif choice == '5' or choice == 'q':
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, 'Cancel'):
             break
-        else:
-            print("Not a valid option\n")
+        if event == 'Submit':
+            try:
+                capacity = int(values['-CAPACITY-'])
+                new_vehicle = pd.DataFrame({
+                    "vehicle_id": [f"v{vehicle_id}"],
+                    "capacity": [capacity],
+                    "is_available": [True]
+                })
+
+                vehicles = pd.concat([vehicles, new_vehicle], ignore_index=True)
+                vehicles.to_csv("vehicles.csv", index=False)
+                sg.popup(f'✅ Vehicle v{vehicle_id} added successfully!', title='Success')
+                break
+            except ValueError:
+                sg.popup_error('Please enter valid capacity', title='Error')
+
+    window.close()
+
+def drop_vehicle():
+    global vehicles
+    if vehicles.empty:
+        sg.popup('⚠️ No vehicles available', title='Info')
+        return
+
+    layout = [
+        [sg.Text('🛻 Drop Vehicle', font=('Arial', 14))],
+        [sg.Text('Enter Vehicle ID (e.g., v1):'), sg.Input(key='-ID-')],
+        [sg.Button('Submit'), sg.Button('Cancel')]
+    ]
+
+    window = sg.Window('Drop Vehicle', layout, modal=True, element_padding=(10, 10))
+
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, 'Cancel'):
+            break
+        if event == 'Submit':
+            vehicle_id = values['-ID-'].strip()
+            if vehicle_id in vehicles["vehicle_id"].values:
+                vehicles = vehicles[vehicles["vehicle_id"] != vehicle_id]
+                vehicles.to_csv("vehicles.csv", index=False)
+                sg.popup(f'✅ Vehicle {vehicle_id} removed', title='Success')
+                break
+            else:
+                sg.popup_error('❌ Invalid vehicle ID', title='Error')
+
+    window.close()
+
+def main():
+    layout = [
+        [sg.Text('🚚 Logistics Management System', font=('Arial', 20),
+                 justification='center', text_color='#E0E0E0',
+                 background_color='#1E1E1E', expand_x=True, pad=(0, 20))],
+        [sg.HorizontalSeparator(color='#4A148C')],
+
+        [sg.Frame('📦 Packages', [
+            [sg.Button('➕ Add Package', size=(20, 2)),
+             sg.Button('🗑️ Drop Package', size=(20, 2))],
+            [sg.Button('📜 View Packages', size=(43, 2))]
+        ], title_color='#E0E0E0', background_color='#1E1E1E',
+                  element_justification='center', pad=(15, 15), border_width=1)],
+
+        [sg.Frame('🚛 Vehicles', [
+            [sg.Button('➕ Add Vehicle', size=(20, 2)),
+             sg.Button('🛻 Drop Vehicle', size=(20, 2))],
+            [sg.Button('📜 View Vehicles', size=(43, 2))]
+        ], title_color='#E0E0E0', background_color='#1E1E1E',
+                  element_justification='center', pad=(15, 15), border_width=1)],
+
+        [sg.HorizontalSeparator(color='#4A148C')],
+        [sg.Button('❌ Exit', expand_x=True, size=(20, 1))]
+    ]
+
+    window = sg.Window('Logistics Manager', layout, size=(800, 600),
+                       resizable=True, finalize=True, element_padding=(12, 12),
+                       background_color='#1E1E1E')
+
+    while True:
+        event, values = window.read()
+
+        if event == sg.WIN_CLOSED or event == '❌ Exit':
+            break
+        elif event == '➕ Add Package':
+            add_package()
+        elif event == '🗑️ Drop Package':
+            drop_package()
+        elif event == '📜 View Packages':
+            if not packages.empty:
+                sg.Window('Packages List', [[sg.Table(values=packages.values.tolist(),
+                                                      headings=packages.columns.tolist(),
+                                                      auto_size_columns=True,
+                                                      display_row_numbers=False,
+                                                      num_rows=25,
+                                                      background_color='#3A3A3A',
+                                                      text_color='#E0E0E0')]],
+                         modal=True, background_color='#1E1E1E').read(close=True)
+            else:
+                sg.popup('⚠️ No packages available', title='Info', background_color='#1E1E1E')
+        elif event == '➕ Add Vehicle':
+            add_vehicle()
+        elif event == '🛻 Drop Vehicle':
+            drop_vehicle()
+        elif event == '📜 View Vehicles':
+            if not vehicles.empty:
+                sg.Window('Vehicles List', [[sg.Table(values=vehicles.values.tolist(),
+                                                      headings=vehicles.columns.tolist(),
+                                                      auto_size_columns=True,
+                                                      display_row_numbers=False,
+                                                      num_rows=25,
+                                                      background_color='#3A3A3A',
+                                                      text_color='#E0E0E0')]],
+                         modal=True, background_color='#1E1E1E').read(close=True)
+            else:
+                sg.popup('⚠️ No vehicles available', title='Info', background_color='#1E1E1E')
+
+    window.close()
+
+if __name__ == '__main__':
+    main()
