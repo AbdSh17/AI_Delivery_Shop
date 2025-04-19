@@ -58,7 +58,8 @@ def add_package():
         "dest_x": [dest_x],
         "dest_y": [dest_y],
         "weight": [weight],
-        "priority": [priority]
+        "priority": [priority],
+        "is_delivered": [False]
     })
     packages = pd.concat([packages, new_package], ignore_index=True)
     packages.to_csv("packages.csv", index= False)
@@ -89,6 +90,7 @@ def add_vehicle():
     new_vehicle = pd.DataFrame({
         "vehicle_id": [f"v{str(vehicle_id)}"],
         "capacity": [capacity],
+        "is_available": [True]
     })
     vehicles = pd.concat([vehicles, new_vehicle], ignore_index=True)
     vehicles.to_csv("vehicles.csv", index= False)
