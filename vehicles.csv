@@ -1,2 +1,3 @@
-vehicle_id,capacity
-v2,43
+vehicle_id,capacity,is_available
+v1,40,True
+v2,65,True
