@@ -188,28 +188,46 @@ def drop_vehicle():
 
     window.close()
 
+# Empty SA function
+def calculate_sa():
+    pass
+
+# Empty GA function
+def calculate_ga():
+    pass
+
 def main():
     layout = [
+        # Main text
         [sg.Text('🚚 Logistics Management System', font=('Arial', 20),
                  justification='center', text_color='#E0E0E0',
                  background_color='#1E1E1E', expand_x=True, pad=(0, 20))],
         [sg.HorizontalSeparator(color='#4A148C')],
-
-        [sg.Frame('📦 Packages', [
-            [sg.Button('➕ Add Package', size=(20, 2)),
-             sg.Button('🗑️ Drop Package', size=(20, 2))],
-            [sg.Button('📜 View Packages', size=(43, 2))]
-        ], title_color='#E0E0E0', background_color='#1E1E1E',
-                  element_justification='center', pad=(15, 15), border_width=1)],
-
-        [sg.Frame('🚛 Vehicles', [
-            [sg.Button('➕ Add Vehicle', size=(20, 2)),
-             sg.Button('🛻 Drop Vehicle', size=(20, 2))],
-            [sg.Button('📜 View Vehicles', size=(43, 2))]
-        ], title_color='#E0E0E0', background_color='#1E1E1E',
-                  element_justification='center', pad=(15, 15), border_width=1)],
-
+        # Centered column with all three frames
+        [sg.Column([
+            # Packages Frame
+            [sg.Frame('📦 Packages', [
+                [sg.Button('➕ Add Package', size=(20, 2)),
+                 sg.Button('🗑️ Drop Package', size=(20, 2))],
+                [sg.Button('📜 View Packages', size=(43, 2))]
+            ], title_color='#E0E0E0', background_color='#1E1E1E',
+                      element_justification='center', pad=(15, 15), border_width=1)],
+            # Vehicles Frame
+            [sg.Frame('🚛 Vehicles', [
+                [sg.Button('➕ Add Vehicle', size=(20, 2)),
+                 sg.Button('🛻 Drop Vehicle', size=(20, 2))],
+                [sg.Button('📜 View Vehicles', size=(43, 2))]
+            ], title_color='#E0E0E0', background_color='#1E1E1E',
+                      element_justification='center', pad=(15, 15), border_width=1)],
+            # Optimization Algorithms Frame
+            [sg.Frame('⚙️ Optimization Algorithms', [
+                [sg.Button('🔥 Simulated Annealing (SA)', size=(20, 2)),
+                 sg.Button('🧬 Genetic Algorithm (GA)', size=(20, 2))]
+            ], title_color='#E0E0E0', background_color='#1E1E1E',
+                      element_justification='center', pad=(15, 15), border_width=1)]
+        ], justification='center', element_justification='center')],
         [sg.HorizontalSeparator(color='#4A148C')],
+        # Exit button
         [sg.Button('❌ Exit', expand_x=True, size=(20, 1))]
     ]
 
@@ -219,7 +237,6 @@ def main():
 
     while True:
         event, values = window.read()
-
         if event == sg.WIN_CLOSED or event == '❌ Exit':
             break
         elif event == '➕ Add Package':
@@ -254,6 +271,10 @@ def main():
                          modal=True, background_color='#1E1E1E').read(close=True)
             else:
                 sg.popup('⚠️ No vehicles available', title='Info', background_color='#1E1E1E')
+        elif event == '🔥 Simulated Annealing (SA)':
+            calculate_sa()
+        elif event == '🧬 Genetic Algorithm (GA)':
+            calculate_ga()
 
     window.close()
 
