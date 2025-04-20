@@ -1,6 +1,13 @@
 import pandas as pd
 import os
 import PySimpleGUI as sg
+import random
+
+class Constants:
+    TEMPERATURE = 1000
+    COOLING_RATE = 0.9
+    STOPPING_TEMPERATURE = 1
+    EPOCHS = 100
 
 # ============================ Dark Violet Theme ============================
 dark_violet_theme = {
@@ -188,13 +195,48 @@ def drop_vehicle():
 
     window.close()
 
-# Empty SA function
-def calculate_sa():
-    pass
-
-# Empty GA function
 def calculate_ga():
     pass
+
+def calculate_distance(index1, index2):
+    if index1 == -1:
+        return ((packages["dest_x"][index2] ** 2) + (packages["dest_y"][index2] ** 2)) ** 0.5
+    return (((packages["dest_x"][index2] - packages["dest_x"][index1]) ** 2) + ((packages["dest_y"][index2] - packages["dest_y"][index1]) ** 2)) ** 0.5
+
+def objective_function(state):
+    pass
+
+def random_next_state(state):
+    pass
+
+def calculate_sa():
+    global packages
+    temp = Constants.TEMPERATURE
+    epochs = Constants.EPOCHS
+    cooling_rate = Constants.COOLING_RATE
+
+    state = {}
+    max_range = len(packages["package_id"])
+    copy_packages = packages.copy()
+
+    for vid in vehicles["vehicle_id"].values:
+        if max_range <= 0:
+            break
+        random_index = int(random.random() * max_range)
+        max_range -= 1
+        state[f"{vid}"] = [(0,0), (copy_packages["dest_x"][random_index],copy_packages["dest_y"][random_index])]
+        copy_packages.drop(random_index, axis=0, inplace=True)
+        copy_packages.reset_index(inplace=True, drop=True)
+
+    print(state)
+
+    for i in range(epochs):
+        if temp < 1 :
+            break
+        temp *= cooling_rate
+
+        next_state =
+
 
 def main():
     layout = [
@@ -279,4 +321,5 @@ def main():
     window.close()
 
 if __name__ == '__main__':
-    main()
+    # main()
+    calculate_sa()
