@@ -7,12 +7,11 @@ import PySimpleGUI as sg
 import random
 import time
 
-
 class Constants:
     TEMPERATURE = 1000
     COOLING_RATE = 0.99
     STOPPING_TEMPERATURE = 1
-    EPOCHS = 100
+    EPOCHS = 1000
     PRIORITY_RATIO = 0.5
     RE_INITIATE_EPOCHS = 10
 
@@ -49,9 +48,11 @@ else:
 
 if os.path.exists('packages.csv'):
     packages = pd.read_csv('packages.csv')
+    all_packages = packages.copy()
 else:
     packages = pd.DataFrame(columns=['package_id', 'dest_x', 'dest_y', 'weight', 'priority', 'is_delivered'])
     packages.to_csv('packages.csv', index=False)
+    all_packages = packages.copy()
 # ============================ Global ============================
 
 def add_package():
@@ -233,17 +234,38 @@ def objective_function(state):
             # total distance + return distance
     return total_distance + calculate_distance(x1, x2, 0, 0), real_distance + calculate_distance(x1, x2, 0, 0)
 
-def did_exceed_the_weight(packs, van_weight):
-    return sum([pack_weight[3] for pack_weight in packs]) > van_weight
+def make_valid_packages():
+    packages_weights = sum(packages["weight"].values)
+    vehicles_capacity = sum(vehicles["capacity"].values)
+
+    if vehicles_capacity >= packages_weights:
+        packages["is_delivered"] = True # all the packages will be delivered
+        return True
+
+    sorted_packages = packages.sort_values(by=["priority", "weight"], ascending=[True, True])
+
+
+    while packages_weights > vehicles_capacity:
+        if sorted_packages.empty:
+           # if no packages left
+            return False
+
+        # drop the last package (lowest priority, highest weight)
+        dropped_package = sorted_packages.iloc[-1] # get the last pack
+        packages_weights -= dropped_package["weight"] # remove last pack weight
+        sorted_packages = sorted_packages.iloc[:-1]  # remove the last package
+
+    packages.drop(packages.index.difference(sorted_packages.index), inplace=True) # re-update packages
+    packages["is_delivered"] = True # all the remain packages will be delivered
+
+    return True
 
 # if all the packs in the same van
-def random_next_state(state):
+def random_next_state(state, weights_state):
 
     new_state = copy.deepcopy(state) # Deep Cloning
     choices = 2 # Either Switch between packs in the same vehicle or switch in other vehicles
     switching_method = random.randint(0, choices - 1) # 0 or 1
-
-    switching_method = 1
 
     number_of_vehicles = len(vehicles["vehicle_id"])
     number_of_all_packs = len(packages["package_id"])
@@ -278,7 +300,6 @@ def random_next_state(state):
 
     package1_number, package2_number, vehicle1_number, vehicle2_number = 0, 0, 0, 0
 
-
     if switching_method == Constants.SWAP_IN_SAME_VEHICLE:
         # ===== Random vehicle ======
         while True:
@@ -305,19 +326,32 @@ def random_next_state(state):
             # ==== Swap ====
 
     if switching_method == Constants.SWAP_IN_DIFFERENT_VEHICLE:
-        # ===== Random two vehicles =====
+
+        max_iterations = 0
         while True:
+            # ===== Random two vehicles =====
             vehicle1_number, vehicle2_number = int(random.random() * number_of_vehicles), int(random.random() * number_of_vehicles)
             vid1 = vehicles.iloc[vehicle1_number]["vehicle_id"]
             vid2 = vehicles.iloc[vehicle2_number]["vehicle_id"]
-            if vehicle1_number != vehicle2_number and len(new_state[f"{vid1}"]) > 1 and len(new_state[f"{vid2}"]) > 1:
-                break
-        # ===== Random two vehicles =====
+            # ===== Random two vehicles =====
 
-        # ==== Random Pack ====
-        number_of_packages1, number_of_packages2 =  len(new_state[f"{vid1}"]), len(new_state[f"{vid2}"])
-        package1_number, package2_number = random.randint(1, number_of_packages1 - 1), random.randint(1,number_of_packages2 - 1)
-        # ==== Random Pack ====
+            # if the vehicle choice is legal
+            if vehicle1_number != vehicle2_number and len(new_state[f"{vid1}"]) > 1 and len(new_state[f"{vid2}"]) > 1:
+                # ==== Random Pack ====
+                number_of_packages1, number_of_packages2 = len(new_state[f"{vid1}"]), len(new_state[f"{vid2}"])
+                package1_number, package2_number = random.randint(1, number_of_packages1 - 1), random.randint(1, number_of_packages2 - 1)
+                # ==== Random Pack ====
+            else:
+                continue
+
+            # check if the weights are legal
+            if  weights_state[f"{vid1}"][0] >= (weights_state[f"{vid1}"][1] + new_state[f"{vid2}"][package2_number][3])\
+                and weights_state[f"{vid2}"][0] >= (weights_state[f"{vid2}"][1] + new_state[f"{vid1}"][package1_number][3]):
+                break
+
+            max_iterations += 1
+            if max_iterations == number_of_vehicles * 10:
+                return None
 
         # ==== Swap ====
         temp_new_state = new_state[f"{vid1}"][package1_number]
@@ -327,33 +361,58 @@ def random_next_state(state):
 
     return new_state
 
+def random_initial_state(state, weights_state):
+    max_range = len(vehicles["vehicle_id"])  # range of random number to choose
+    number_of_packages = len(packages["package_id"])
+
+    make_valid_packages()
+
+    for _, pack in packages.iterrows(): # to iterate throw its columns and rows (need rows)
+        iterations_count = 0
+        while True:
+            vehicle_number = int(random.random() * max_range)  # random vehicle
+            vid = vehicles.iloc[vehicle_number]["vehicle_id"]  # give me the vehicle with this index
+
+            if weights_state[f"{vid}"][0] >= (weights_state[f"{vid}"][1] + pack["weight"]):
+                break
+
+            iterations_count += 1
+            if iterations_count == (number_of_packages + 5):
+                return False
+
+        state[f"{vid}"].append((pack["dest_x"], pack["dest_y"], pack["priority"], pack["weight"]))
+        weights_state[f"{vid}"][1] += pack["weight"]
+
+    return True
+
 def calculate_sa(print_input):
     global packages
     temp = Constants.TEMPERATURE # initial temp
     epochs = Constants.EPOCHS # max number of epochs
-    cooling_rate = Constants.COOLING_RATE # temp *= cooling_rate (0.9 <= cr <= 0.99)
+    cooling_rate = Constants.COOLING_RATE # temp *= cooling_rate (0.9 <= CR <= 0.99)
 
-    state = {} # empty state will be filled
-    weights_state = {}
-    max_range = len(vehicles["vehicle_id"]) # range of random number to choose
+    initial_state = {} # empty state will be filled
+    initial_weights_state = {}
     # copy_packages = packages.copy() # to drop packages
 
     for vid in vehicles["vehicle_id"].values:
-        state[vid] = [(0, 0, 0, 0)]
-        
+        initial_state[vid] = [(0, 0, 0, 0)] # capacity
+        initial_weights_state[vid]  = [vehicles.loc[vehicles["vehicle_id"] == vid]["capacity"].values[0], 0]
 
-    # loop will give each package to random vehicle
-    for _, pack in packages.iterrows(): # to iterate throw its columns and rows (need columns)
-        vehicle_number = int(random.random() * max_range) # random vehicle
-        vid = vehicles.iloc[vehicle_number]["vehicle_id"] # give me the vehicle with this index
+    state = copy.deepcopy(initial_state)
+    weights_state = copy.deepcopy(initial_weights_state)
+    # loop will give each package to random vehicle until it works
 
-        state[f"{vid}"].append((pack["dest_x"], pack["dest_y"], pack["priority"], pack["weight"]))
+    print("entered")
+    while not random_initial_state(state, weights_state):
+        weights_state = copy.deepcopy(initial_weights_state)
+        state = copy.deepcopy(initial_state)
+        continue
 
 
     if print_input:
         print(state)
-
-    epochs = 1000
+        print(weights_state)
 
 
     for i in range(epochs):
@@ -361,7 +420,10 @@ def calculate_sa(print_input):
         if temp <= 1:
             break
 
-        next_state = random_next_state(state)
+        next_state = random_next_state(state, weights_state)
+
+        if next_state is None: # if the assignation FAILED, retry another random
+            continue
 
         current_state_objective, _ = objective_function(state)
         next_state_objective, _ = objective_function(next_state)
@@ -378,7 +440,6 @@ def calculate_sa(print_input):
             random_choose = random.random()
             if random_choose < odds:
                 state = next_state
-
 
         temp *= cooling_rate
 
@@ -566,3 +627,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    # print(calculate_sa(True))
