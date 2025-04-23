@@ -13,9 +13,9 @@ class Constants:
     STOPPING_TEMPERATURE = 1
     EPOCHS = 1000
     PRIORITY_RATIO = 0.5
-    RE_INITIATE_EPOCHS = 10
+    RE_INITIATE_EPOCHS = 20
 
-    SWAP_IN_SAME_VEHICLE, SWAP_IN_DIFFERENT_VEHICLE = 0, 1
+    SWAP_IN_SAME_VEHICLE, SWAP_IN_DIFFERENT_VEHICLE, MOVE_TO_DIFFERENT_VEHICLE = [0], [1], [2]
 
 
 # ============================ Dark Violet Theme ============================
@@ -260,11 +260,10 @@ def make_valid_packages():
 
     return True
 
-# if all the packs in the same van
 def random_next_state(state, weights_state):
 
     new_state = copy.deepcopy(state) # Deep Cloning
-    choices = 2 # Either Switch between packs in the same vehicle or switch in other vehicles
+    choices = 3 # Either Switch between packs in the same vehicle or switch in other vehicles
     switching_method = random.randint(0, choices - 1) # 0 or 1
 
     number_of_vehicles = len(vehicles["vehicle_id"])
@@ -277,7 +276,7 @@ def random_next_state(state, weights_state):
     found_vehicle1, found_vehicle2 = False, True
 
     # if no vehicle with more than one location than option 2 (can't SWAP_IN_SAME_VEHICLE)
-    if switching_method == Constants.SWAP_IN_SAME_VEHICLE:
+    if switching_method in Constants.SWAP_IN_SAME_VEHICLE:
         for i in range(number_of_vehicles):
             vid = vehicles.iloc[i]["vehicle_id"]
             if len(new_state[f"{vid}"]) > 2:
@@ -288,7 +287,7 @@ def random_next_state(state, weights_state):
             switching_method = 1
 
     # if all the packs are in the same vehicle (can't SWAP_IN_different_VEHICLE)
-    if switching_method == Constants.SWAP_IN_DIFFERENT_VEHICLE:
+    if switching_method in Constants.SWAP_IN_DIFFERENT_VEHICLE:
         for i in range(number_of_vehicles):
             vid = vehicles.iloc[i]["vehicle_id"]
             if len(new_state[f"{vid}"]) - 1== number_of_all_packs:
@@ -300,7 +299,7 @@ def random_next_state(state, weights_state):
 
     package1_number, package2_number, vehicle1_number, vehicle2_number = 0, 0, 0, 0
 
-    if switching_method == Constants.SWAP_IN_SAME_VEHICLE:
+    if switching_method in Constants.SWAP_IN_SAME_VEHICLE:
         # ===== Random vehicle ======
         while True:
             vehicle_number = int(random.random() * number_of_vehicles)
@@ -325,7 +324,7 @@ def random_next_state(state, weights_state):
             new_state[f"{vid}"][package2_number] = temp_new_state
             # ==== Swap ====
 
-    if switching_method == Constants.SWAP_IN_DIFFERENT_VEHICLE:
+    if switching_method in Constants.SWAP_IN_DIFFERENT_VEHICLE:
 
         max_iterations = 0
         while True:
@@ -358,6 +357,37 @@ def random_next_state(state, weights_state):
         new_state[f"{vid1}"][package1_number] = new_state[f"{vid2}"][package2_number]
         new_state[f"{vid2}"][package2_number] = temp_new_state
         # ==== Swap ====
+
+    if switching_method in Constants.MOVE_TO_DIFFERENT_VEHICLE:
+        max_iterations = 0
+        while True:
+            # ===== Random two vehicles =====
+            vehicle1_number, vehicle2_number = int(random.random() * number_of_vehicles), int(random.random() * number_of_vehicles)
+            vid1 = vehicles.iloc[vehicle1_number]["vehicle_id"]
+            vid2 = vehicles.iloc[vehicle2_number]["vehicle_id"]
+            # ===== Random two vehicles =====
+
+            # if the vehicle choice is legal
+            if vehicle1_number != vehicle2_number and len(new_state[f"{vid1}"]) > 1:
+                # ==== Random Pack ====
+                number_of_packages= len(new_state[f"{vid1}"])
+                package_number = random.randint(1, number_of_packages - 1)
+                # ==== Random Pack ====
+            else:
+                continue
+
+                # check if the weights are legal (V2 Capacity > Current V2 + New Package Weight
+            if weights_state[f"{vid2}"][0] >= (weights_state[f"{vid2}"][1] + new_state[f"{vid1}"][package1_number][3]):
+                    break
+
+            max_iterations += 1
+            if max_iterations == number_of_vehicles * 10:
+                return None
+
+        # ==== Move ====
+        new_state[f"{vid2}"].append(new_state[f"{vid1}"][package1_number])
+        # ==== Move ====
+
 
     return new_state
 
@@ -408,7 +438,6 @@ def calculate_sa(print_input):
         weights_state = copy.deepcopy(initial_weights_state)
         state = copy.deepcopy(initial_state)
         continue
-
 
     if print_input:
         print(state)
@@ -610,7 +639,7 @@ def main():
                 sg.popup('⚠️ No vehicles available', title='Info', background_color='#1E1E1E')
         elif event == '🔥 Simulated Annealing (SA)':
             # Update PRIORITY_RATIO based on slider value (map 0–100 to 0–10)
-            Constants.PRIORITY_RATIO = values['-PRIORITY-RATIO-SLIDER-'] / 1
+            Constants.PRIORITY_RATIO = values['-PRIORITY-RATIO-SLIDER-'] / 10
             if packages.empty or vehicles.empty:
                 sg.popup('⚠️ Please add packages and vehicles first!', title='Error', background_color='#1E1E1E')
             else:
