@@ -13,7 +13,8 @@ class Constants:
     STOPPING_TEMPERATURE = 1
     EPOCHS = 1000
     PRIORITY_RATIO = 0.5
-    RE_INITIATE_EPOCHS = 50
+    RE_INITIATE_EPOCHS = 20
+    DRAW_SLEEP_TIME = 0.4
 
     SWAP_IN_SAME_VEHICLE, SWAP_IN_DIFFERENT_VEHICLE, MOVE_TO_DIFFERENT_VEHICLE = [0], [1], [2]
 
@@ -490,6 +491,10 @@ def calculate_minimum_sa():
     print(minimum_state)
     return minimum_state
 
+import math
+
+import math
+
 def visualize_routes_pysimplegui(state):
     graph_size = (800, 600)
     layout = [
@@ -505,42 +510,52 @@ def visualize_routes_pysimplegui(state):
     window = sg.Window('Delivery Routes', layout, finalize=True, background_color='#1E1E1E')
     graph = window['-GRAPH-']
 
-    # Draw shop location
+    # Draw shop
     graph.DrawCircle((0, 0), radius=5, fill_color='white', line_color='black')
     graph.DrawText('Shop', (0, 0), color='black', font=('Arial Bold', 10), text_location=sg.TEXT_LOCATION_BOTTOM_LEFT)
 
-    # Animate vehicles
-    colors = ['#FF5733', '#33FF57', '#3357FF', '#F3FF33']  # Red, Green, Blue, Yellow
+    colors = ['#FF5733', '#33FF57', '#3357FF', '#F3FF33']
+    # Draw each vehicle’s animated path
     for idx, (vid, route) in enumerate(state.items()):
         color = colors[idx % len(colors)]
-        previous_point = None
+        prev_pt = (0, 0)
 
-        for i in range(len(route)):
-            # Extract x, y, and priority
-            x, y, priority, _ = route[i]  # Unpack all three elements
-            current_point = (x, y)
+        for i, (x, y, priority, _) in enumerate(route):
+            curr_pt = (x, y)
 
-            # Draw priority number first (to avoid overlap with lines)
-            graph.DrawText(str(priority), (x + 3, y + 3), color='white', font=('Arial Bold', 9))
+            if i > 0:
+                # Draw van icon at curr_pt
+                body_w, body_h = 4, 2
+                bx0, by0 = x - body_w/2, y - body_h/2
+                bx1, by1 = x + body_w/2, y + body_h/2
+                graph.DrawRectangle((bx0, by0), (bx1, by1), fill_color=color, line_color='white')
+                # Wheels
+                wheel_r = 0.6
+                graph.DrawCircle((bx0 + wheel_r, by0), radius=wheel_r, fill_color='black', line_color='black')
+                graph.DrawCircle((bx1 - wheel_r, by0), radius=wheel_r, fill_color='black', line_color='black')
+                # Cabin
+                roof_w, roof_h = 2.5, 1.2
+                rx0 = x - roof_w/2
+                ry0 = by1
+                graph.DrawRectangle((rx0, ry0), (rx0 + roof_w, ry0 + roof_h), fill_color=color, line_color='white')
+                # Priority label
+                graph.DrawText(str(priority), (x + 3, y + 3), color='white', font=('Arial Bold', 9))
 
-            # Draw current point (circle)
-            graph.DrawCircle(current_point, radius=3, fill_color=color, line_color='white')
 
-            # Draw line from previous point to current point
-            if previous_point:
-                graph.DrawLine(previous_point, current_point, color=color, width=2)
-                window.refresh()  # Update the GUI
-                time.sleep(0.5)  # Control animation speed
+                # Draw line to next stop
+                graph.DrawLine(prev_pt, curr_pt, color=color, width=2)
+                window.refresh()
+                time.sleep(Constants.DRAW_SLEEP_TIME)
 
-            previous_point = current_point
 
-    # Draw return to shop (optional, if required)
-    for vid, route in state.items():
+            prev_pt = curr_pt
+
+        # Draw return-to-shop leg (solid gray), no animation
         if len(route) > 1:
             last_x, last_y, _, _ = route[-1]
             graph.DrawLine((last_x, last_y), (0, 0), color='gray', width=1)
 
-    # Final GUI loop
+    # Event loop
     while True:
         event, _ = window.read()
         if event in (sg.WIN_CLOSED, 'Close'):
