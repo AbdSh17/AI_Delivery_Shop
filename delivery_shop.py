@@ -13,7 +13,7 @@ class Constants:
     STOPPING_TEMPERATURE = 1
     EPOCHS = 1000
     PRIORITY_RATIO = 0.5
-    RE_INITIATE_EPOCHS = 20
+    RE_INITIATE_EPOCHS = 50
 
     SWAP_IN_SAME_VEHICLE, SWAP_IN_DIFFERENT_VEHICLE, MOVE_TO_DIFFERENT_VEHICLE = [0], [1], [2]
 
@@ -264,7 +264,7 @@ def random_next_state(state, weights_state):
 
     new_state = copy.deepcopy(state) # Deep Cloning
     choices = 3 # Either Switch between packs in the same vehicle or switch in other vehicles
-    switching_method = random.randint(0, choices - 1) # 0 or 1
+    switching_method = random.randint(0, choices - 1)
 
     number_of_vehicles = len(vehicles["vehicle_id"])
     number_of_all_packs = len(packages["package_id"])
@@ -297,7 +297,7 @@ def random_next_state(state, weights_state):
         if not found_vehicle2:
             switching_method = 0
 
-    package1_number, package2_number, vehicle1_number, vehicle2_number = 0, 0, 0, 0
+    package1_number, package2_number, vehicle1_number, vehicle2_number, package_number = 0, 0, 0, 0, 0
 
     if switching_method in Constants.SWAP_IN_SAME_VEHICLE:
         # ===== Random vehicle ======
@@ -385,7 +385,9 @@ def random_next_state(state, weights_state):
                 return None
 
         # ==== Move ====
-        new_state[f"{vid2}"].append(new_state[f"{vid1}"][package1_number])
+        index_to_insert = random.randint(1, len(new_state[f"{vid2}"]))
+        new_state[f"{vid2}"].insert(index_to_insert, new_state[f"{vid1}"][package_number])  # move the pack to V2
+        new_state[f"{vid1}"].pop(package_number)  # Remove the pack from v1
         # ==== Move ====
 
 
