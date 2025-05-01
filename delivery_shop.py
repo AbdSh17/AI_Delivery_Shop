@@ -686,10 +686,19 @@ def main():
         if event == sg.WIN_CLOSED or event == '❌ Exit':
             break
         elif event == '➕ Add Package':
+            packages = pd.read_csv('packages.csv')
+            vehicles = pd.read_csv('vehicles.csv')
+            all_packages = packages.copy()
             add_package()
         elif event == '🗑️ Drop Package':
+            packages = pd.read_csv('packages.csv')
+            vehicles = pd.read_csv('vehicles.csv')
+            all_packages = packages.copy()
             drop_package()
         elif event == '📜 View Packages':
+            packages = pd.read_csv('packages.csv')
+            vehicles = pd.read_csv('vehicles.csv')
+            all_packages = packages.copy()
             if not packages.empty:
                 sg.Window('Packages List', [[sg.Table(values=packages.values.tolist(),
                                                       headings=packages.columns.tolist(),
@@ -702,8 +711,14 @@ def main():
             else:
                 sg.popup('⚠️ No packages available', title='Info', background_color='#1E1E1E')
         elif event == '➕ Add Vehicle':
+            packages = pd.read_csv('packages.csv')
+            vehicles = pd.read_csv('vehicles.csv')
+            all_packages = packages.copy()
             add_vehicle()
         elif event == '🛻 Drop Vehicle':
+            packages = pd.read_csv('packages.csv')
+            vehicles = pd.read_csv('vehicles.csv')
+            all_packages = packages.copy()
             drop_vehicle()
         elif event == '📜 View Vehicles':
             if not vehicles.empty:
