@@ -347,10 +347,15 @@ def random_next_state(state, weights_state):
             # check if the weights are legal
             if  weights_state[f"{vid1}"][0] >= (weights_state[f"{vid1}"][1] + new_state[f"{vid2}"][package2_number][3])\
                 and weights_state[f"{vid2}"][0] >= (weights_state[f"{vid2}"][1] + new_state[f"{vid1}"][package1_number][3]):
+                weights_state[f"{vid1}"][1] -= new_state[f"{vid1}"][package1_number][3]
+                weights_state[f"{vid1}"][1] += new_state[f"{vid2}"][package2_number][3]
+
+                weights_state[f"{vid2}"][1] -= new_state[f"{vid2}"][package2_number][3]
+                weights_state[f"{vid2}"][1] += new_state[f"{vid1}"][package1_number][3]
                 break
 
             max_iterations += 1
-            if max_iterations == number_of_vehicles * 10:
+            if max_iterations == number_of_vehicles * 4:
                 return None
 
         # ==== Swap ====
@@ -378,11 +383,13 @@ def random_next_state(state, weights_state):
                 continue
 
                 # check if the weights are legal (V2 Capacity > Current V2 + New Package Weight
-            if weights_state[f"{vid2}"][0] >= (weights_state[f"{vid2}"][1] + new_state[f"{vid1}"][package1_number][3]):
-                    break
+            if weights_state[f"{vid2}"][0] >= (weights_state[f"{vid2}"][1] + new_state[f"{vid1}"][package_number][3]):
+                weights_state[f"{vid1}"][1] -= new_state[f"{vid1}"][package_number][3]
+                weights_state[f"{vid2}"][1] += new_state[f"{vid1}"][package_number][3]
+                break
 
             max_iterations += 1
-            if max_iterations == number_of_vehicles * 10:
+            if max_iterations == number_of_vehicles * 4:
                 return None
 
         # ==== Move ====
@@ -390,7 +397,6 @@ def random_next_state(state, weights_state):
         new_state[f"{vid2}"].insert(index_to_insert, new_state[f"{vid1}"][package_number])  # move the pack to V2
         new_state[f"{vid1}"].pop(package_number)  # Remove the pack from v1
         # ==== Move ====
-
 
     return new_state
 
@@ -446,7 +452,6 @@ def calculate_sa(print_input):
         print(state)
         print(weights_state)
 
-
     for i in range(epochs):
 
         if temp <= 1:
@@ -464,6 +469,8 @@ def calculate_sa(print_input):
 
         if i % 10 == 0 and print_input:
             print(f"{i}: objective = {int(current_state_objective)}")
+            print(state)
+            # print(weights_state)
 
         if delta_e < 0:
             state = next_state
@@ -491,6 +498,7 @@ def calculate_minimum_sa():
     print(minimum_state)
     return minimum_state
 
+
 import math
 
 import math
@@ -514,7 +522,17 @@ def visualize_routes_pysimplegui(state):
     graph.DrawCircle((0, 0), radius=5, fill_color='white', line_color='black')
     graph.DrawText('Shop', (0, 0), color='black', font=('Arial Bold', 10), text_location=sg.TEXT_LOCATION_BOTTOM_LEFT)
 
+    # Legend: map each vehicle ID to its color (top-right)
     colors = ['#FF5733', '#33FF57', '#3357FF', '#F3FF33']
+    legend_x, legend_y = 90, 95  # position near top-right
+    for idx, vid in enumerate(state.keys()):
+        col = colors[idx % len(colors)]
+        y_offset = legend_y - idx * 4
+        # small color box
+        graph.DrawRectangle((legend_x, y_offset), (legend_x + 3, y_offset + 3), fill_color=col, line_color=col)
+        # vehicle label
+        graph.DrawText(f"{vid}", (legend_x + 5, y_offset + 1), color='white', font=('Arial', 8), text_location=sg.TEXT_LOCATION_LEFT)
+
     # Draw each vehicle’s animated path
     for idx, (vid, route) in enumerate(state.items()):
         color = colors[idx % len(colors)]
@@ -541,12 +559,10 @@ def visualize_routes_pysimplegui(state):
                 # Priority label
                 graph.DrawText(str(priority), (x + 3, y + 3), color='white', font=('Arial Bold', 9))
 
-
-                # Draw line to next stop
+                # Draw line to this stop (behind the van)
                 graph.DrawLine(prev_pt, curr_pt, color=color, width=2)
                 window.refresh()
                 time.sleep(Constants.DRAW_SLEEP_TIME)
-
 
             prev_pt = curr_pt
 
@@ -663,6 +679,7 @@ def main():
                 # Run Simulated Annealing
                 final_state = calculate_minimum_sa()
                 print("FINALLLL THING: ", objective_function(final_state)[0])
+                print(final_state)
                 visualize_routes_pysimplegui(final_state)
                 sg.popup(f'✅ Optimization Complete! Total Distance: {objective_function(final_state)[1]:.2f} km',
                          title='Result', background_color='#1E1E1E')
