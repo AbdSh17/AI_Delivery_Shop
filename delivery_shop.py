@@ -7,13 +7,16 @@ import PySimpleGUI as sg
 import random
 import time
 
+from sympy import false
+
+
 class Constants:
     TEMPERATURE = 1000
     COOLING_RATE = 0.99
     STOPPING_TEMPERATURE = 1
     EPOCHS = 1000
     PRIORITY_RATIO = 0.5
-    RE_INITIATE_EPOCHS = 20
+    RE_INITIATE_EPOCHS = 10
     DRAW_SLEEP_TIME = 0.4
 
     SWAP_IN_SAME_VEHICLE, SWAP_IN_DIFFERENT_VEHICLE, MOVE_TO_DIFFERENT_VEHICLE = [0], [1], [2]
@@ -236,15 +239,25 @@ def objective_function(state):
     return total_distance + calculate_distance(x1, x2, 0, 0), real_distance + calculate_distance(x1, x2, 0, 0)
 
 def make_valid_packages():
+
+    global packages, vehicles
+
+    sorted_packages = packages.sort_values(by=["priority", "weight"], ascending=[True, True])
+
+    # drop any package can't fit in any van
+    max_vehicle_capacity = vehicles["capacity"].max()
+    packages = packages[packages["weight"] <= max_vehicle_capacity].reset_index(drop=True)
+
+    # drop any van can't fit in any package
+    min_package_weight = packages["weight"].min()
+    vehicles = vehicles[vehicles["capacity"] >= min_package_weight].reset_index(drop=True)
+
     packages_weights = sum(packages["weight"].values)
     vehicles_capacity = sum(vehicles["capacity"].values)
 
     if vehicles_capacity >= packages_weights:
         packages["is_delivered"] = True # all the packages will be delivered
         return True
-
-    sorted_packages = packages.sort_values(by=["priority", "weight"], ascending=[True, True])
-
 
     while packages_weights > vehicles_capacity:
         if sorted_packages.empty:
@@ -274,10 +287,18 @@ def random_next_state(state, weights_state):
         print("Just one pack")
         exit(1)
 
+    if number_of_vehicles == 0:
+        print("No vehicles")
+        exit(1)
+
+    if number_of_vehicles == 1:
+        switching_method = Constants.SWAP_IN_SAME_VEHICLE[0]
+
     found_vehicle1, found_vehicle2 = False, True
 
     # if no vehicle with more than one location than option 2 (can't SWAP_IN_SAME_VEHICLE)
     if switching_method in Constants.SWAP_IN_SAME_VEHICLE:
+
         for i in range(number_of_vehicles):
             vid = vehicles.iloc[i]["vehicle_id"]
             if len(new_state[f"{vid}"]) > 2:
@@ -285,7 +306,7 @@ def random_next_state(state, weights_state):
                 break
 
         if not found_vehicle1:
-            switching_method = 1
+            switching_method = Constants.SWAP_IN_DIFFERENT_VEHICLE[0]
 
     # if all the packs are in the same vehicle (can't SWAP_IN_different_VEHICLE)
     if switching_method in Constants.SWAP_IN_DIFFERENT_VEHICLE:
@@ -296,7 +317,7 @@ def random_next_state(state, weights_state):
                 break
 
         if not found_vehicle2:
-            switching_method = 0
+            switching_method = Constants.SWAP_IN_SAME_VEHICLE[0]
 
     package1_number, package2_number, vehicle1_number, vehicle2_number, package_number = 0, 0, 0, 0, 0
 
@@ -404,8 +425,6 @@ def random_initial_state(state, weights_state):
     max_range = len(vehicles["vehicle_id"])  # range of random number to choose
     number_of_packages = len(packages["package_id"])
 
-    make_valid_packages()
-
     for _, pack in packages.iterrows(): # to iterate throw its columns and rows (need rows)
         iterations_count = 0
         while True:
@@ -452,6 +471,7 @@ def calculate_sa(print_input):
         print(state)
         print(weights_state)
 
+
     for i in range(epochs):
 
         if temp <= 1:
@@ -464,6 +484,8 @@ def calculate_sa(print_input):
 
         current_state_objective, _ = objective_function(state)
         next_state_objective, _ = objective_function(next_state)
+        if print_input:
+            print(next_state)
 
         delta_e = next_state_objective - current_state_objective
 
@@ -488,6 +510,31 @@ def calculate_sa(print_input):
     return state, objective_function(state)
 
 def calculate_minimum_sa():
+
+    global packages, vehicles, all_packages
+
+    make_valid_packages()
+
+    print(packages)
+
+    number_of_vehicles = len(vehicles["vehicle_id"])
+    number_of_all_packs = len(packages["package_id"])
+
+    if number_of_all_packs <= 1:
+        print("Just one pack")
+        packages = pd.read_csv('packages.csv')
+        vehicles = pd.read_csv('vehicles.csv')
+        all_packages = packages.copy()
+        return None
+
+    if number_of_vehicles == 0:
+        print("No vehicles")
+        packages = pd.read_csv('packages.csv')
+        vehicles = pd.read_csv('vehicles.csv')
+        all_packages = packages.copy()
+        return None
+
+
     print(Constants.PRIORITY_RATIO)
     minimum_state, minimum_objective = calculate_sa(True)
     for _ in range(Constants.RE_INITIATE_EPOCHS):
@@ -497,9 +544,6 @@ def calculate_minimum_sa():
 
     print(minimum_state)
     return minimum_state
-
-
-import math
 
 import math
 
@@ -579,6 +623,9 @@ def visualize_routes_pysimplegui(state):
     window.close()
 
 def main():
+
+    global packages, vehicles, all_packages
+
     layout = [
         # Main text
         [sg.Text('🚚 Logistics Management System', font=('Arial', 20),
@@ -671,18 +718,28 @@ def main():
             else:
                 sg.popup('⚠️ No vehicles available', title='Info', background_color='#1E1E1E')
         elif event == '🔥 Simulated Annealing (SA)':
+
+            packages = pd.read_csv('packages.csv')
+            vehicles = pd.read_csv('vehicles.csv')
+            all_packages = packages.copy()
+
             # Update PRIORITY_RATIO based on slider value (map 0–100 to 0–10)
             Constants.PRIORITY_RATIO = values['-PRIORITY-RATIO-SLIDER-'] / 10
             if packages.empty or vehicles.empty:
                 sg.popup('⚠️ Please add packages and vehicles first!', title='Error', background_color='#1E1E1E')
             else:
                 # Run Simulated Annealing
+
                 final_state = calculate_minimum_sa()
-                print("FINALLLL THING: ", objective_function(final_state)[0])
-                print(final_state)
-                visualize_routes_pysimplegui(final_state)
-                sg.popup(f'✅ Optimization Complete! Total Distance: {objective_function(final_state)[1]:.2f} km',
-                         title='Result', background_color='#1E1E1E')
+                if final_state is None:
+                    sg.popup("⚠️ there's no packages that can be delivered, or there's only one pack", title='Error', background_color='#1E1E1E')
+                else:
+                    print("FINALLLL THING: ", objective_function(final_state)[0])
+                    print(final_state)
+                    visualize_routes_pysimplegui(final_state)
+                    sg.popup(f'✅ Optimization Complete! Total Distance: {objective_function(final_state)[1]:.2f} km',
+                             title='Result', background_color='#1E1E1E')
+
         elif event == '🧬 Genetic Algorithm (GA)':
             calculate_ga()
 
@@ -690,4 +747,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-    # print(calculate_sa(True))
+    # print(calculate_minimum_sa())
