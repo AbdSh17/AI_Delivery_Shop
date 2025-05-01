@@ -1,13 +1,10 @@
 import copy
-import math
 
 import pandas as pd
 import os
 import PySimpleGUI as sg
 import random
 import time
-
-from sympy import false
 
 
 class Constants:
@@ -545,6 +542,603 @@ def calculate_minimum_sa():
     print(minimum_state)
     return minimum_state
 
+def GA():
+    def next_letter(letter: chr) -> chr:
+        # this function increment the last_position used, a,b,... z, A, B, ..., Z
+        if letter >= 'a' and letter < 'z':
+            return chr(ord(letter) + 1)
+        elif letter == 'z':
+            return 'A'
+        elif letter >= 'A' and letter < 'Z':
+            return chr(ord(letter) + 1)
+        elif letter == 'Z':
+            return None  # End of sequence
+        else:
+            return None  # Invalid input
+
+    def empty_vehicles(available_vehicles: dict) -> None:
+        for vehicle_id, vehicle in available_vehicles.items():
+            vehicle["size"] = 0
+            vehicle["has_packages"].clear()
+            vehicle["path"].clear()
+
+    def change_path_permutation(vehicle: dict):
+        """
+        Randomly permutes the middle part of the vehicle's path,
+        while keeping start and end points as 'a'.
+        """
+        path = vehicle["path"]
+
+        if len(path) <= 2:
+            return  # Nothing to shuffle if only depot
+
+        middle_points = path[1:-1]  # Exclude the first 'a' and last 'a'
+        random.shuffle(middle_points)  # Shuffle the delivery points
+
+        # Rebuild the path with start and end as 'a'
+        vehicle["path"] = ['a'] + middle_points + ['a']
+
+    def nn_tour(destinations: list[str], positions: dict) -> list[str]:
+        """nearest-neighbour then 2-opt to shorten tour; returns ['a', ... , 'a']"""
+        if not destinations:
+            return ['a', 'a']
+        unvisited = destinations.copy()
+        tour = ['a']
+        curr = 'a'
+        # nearest neighbour pass
+        while unvisited:
+            nxt = min(unvisited,
+                      key=lambda d: evaluate_aeral_distance(positions, curr, d))
+            tour.append(nxt)
+            unvisited.remove(nxt)
+            curr = nxt
+        tour.append('a')
+
+        # one 2-opt sweep (good enough for <15 nodes)
+        improved = True
+        while improved:
+            improved = False
+            for i in range(1, len(tour) - 2):
+                for j in range(i + 1, len(tour) - 1):
+                    a, b = tour[i - 1], tour[i]
+                    c, d = tour[j], tour[j + 1]
+                    if (evaluate_aeral_distance(positions, a, b)
+                            + evaluate_aeral_distance(positions, c, d)
+                            >
+                            evaluate_aeral_distance(positions, a, c)
+                            + evaluate_aeral_distance(positions, b, d)):
+                        tour[i:j + 1] = reversed(tour[i:j + 1])
+                        improved = True
+        return tour
+
+    def create_single_tour(vehicle, available_packages, positions):
+        """
+        Build a delivery tour for a single vehicle.
+        Start and end at depot ('a'), and shuffle destinations.
+        """
+        if vehicle["size"] != 0:
+            destinations = []
+            for package_id in vehicle["has_packages"]:
+                package = available_packages[f"{package_id}"]
+                temp = {"dest_x": package["dest_x"], "dest_y": package["dest_y"]}
+                desired_destination = [k for k, v in positions.items() if v == temp]
+                if desired_destination[0] not in destinations:
+                    destinations.append(desired_destination[0])
+
+            if len(destinations) > 1:
+                random.shuffle(destinations)
+
+            vehicle["path"] = ['a'] + destinations + ['a']
+
+    def create_tours(available_vehicles: dict, available_packages: dict, positions: dict) -> None:
+        for vehicle_id, vehicle in available_vehicles.items():
+            if vehicle["size"] != 0:  # Non-empty vehicle
+                destinations = []
+                for package_id in vehicle["has_packages"]:
+                    package = available_packages[f"{package_id}"]
+                    temp = {"dest_x": package["dest_x"], "dest_y": package["dest_y"]}
+                    desired_destination = [k for k, v in positions.items() if v == temp]
+                    if desired_destination[0] not in destinations:
+                        destinations.append(desired_destination[0])
+
+                if len(destinations) > 1:
+                    random.shuffle(destinations)  # BIG shuffle the destinations!
+
+                vehicle["path"] = ['a'] + destinations + ['a']  # Start and end with 'a'
+
+    def evaluate_aeral_distance(positions: dict, position_start: str, position_end: str) -> float:
+        # extract the exact position from its letter representation
+        position_start = positions[f"{position_start}"]
+        position_end = positions[f"{position_end}"]
+
+        x1, y1 = position_start["dest_x"], position_start["dest_y"]
+        x2, y2 = position_end["dest_x"], position_end["dest_y"]
+        return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+    def evaluate_fitness(available_vehicles: dict, available_packages: dict) -> float:
+        fitness = 0
+        for vehicle in available_vehicles.values():
+            if vehicle["size"] <= 0:
+                continue
+            # compute path_cost and priority_cost exactly as before
+            path_cost = 0
+            path_prioritization = 0
+            for i in range(len(vehicle["path"]) - 1):
+                a = vehicle["path"][i]
+                b = vehicle["path"][i + 1]
+                cost = evaluate_aeral_distance(positions, a, b)
+                path_cost += cost
+                # deliver priority penalty
+                for pid in vehicle["has_packages"]:
+                    pkg = available_packages[pid]
+                    if pkg["position"] == b:
+                        path_prioritization += (1 / pkg["priority"]) * 2 * path_cost
+            fitness += path_cost + path_prioritization
+
+        if fitness <= 0:
+            return -1
+
+        return fitness
+
+    def evaluate_tours_costs(available_vehicles: dict, available_packages: dict) -> float:
+        cost = 0
+        for vehicle_id, vehicle in available_vehicles.items():
+            if vehicle["size"] <= 0:
+                continue  # this vehicle has no packages to deliver
+
+            path_cost = 0  # cost of a single vehicle's path
+            # imagine we are travlening between position in path, a, f, e, a
+            length = len(vehicle["path"])
+            i, j = 0, 1
+            while j < length:
+                current_position = str(vehicle["path"][i]).strip()
+                next_position = str(vehicle["path"][j]).strip()
+
+                edge_cost = evaluate_aeral_distance(positions, current_position,
+                                                    next_position)  # cost between two positiond
+                path_cost += edge_cost  # increasing path_cost means the transition is done. Thus:
+                current_position = next_position  # the transition is done
+                i += 1
+                j += 1
+
+            cost += path_cost
+
+        if cost == 0:
+            return -1  # invlaid state
+        return cost
+
+    def add_chromosom(population: dict, available_vehicles: dict, available_packages: dict) -> int:
+        fitness = evaluate_fitness(available_vehicles, available_packages)
+        temp_vehicles = {}  # contains used vehicles
+        for vehicle_id, vehicle in available_vehicles.items():
+            if vehicle["size"] <= 0:
+                continue
+            temp_vehicles[f"{vehicle_id}"] = copy.deepcopy(vehicle)  # add to temp
+
+        new_chromosom = {
+            "fitness": fitness,
+            "representation": temp_vehicles
+        }
+
+        # then to add to population
+        length = len(population.keys())  # need to know number of added chromosoms
+        if new_chromosom["fitness"] != -1:
+            population["chromosom_" + f"{length}"] = new_chromosom
+            return +1  # done
+        else:
+            return -1
+
+    def select_chromosoms(pop: dict) -> list[int]:
+        keys = list(pop.keys())
+
+        def tourney():
+            a, b = random.sample(keys, 2)
+            return a if pop[a]["fitness"] < pop[b]["fitness"] else b
+
+        return [keys.index(tourney()), keys.index(tourney())]
+
+    def get_random_unused_vehicle(used_vehicles: list, num_of_vehicles: int) -> str:
+        # Generate all vehicle IDs from v1 to vN
+        all_vehicles = {f"v{i}" for i in range(1, num_of_vehicles + 1)}
+
+        # Get the unused vehicles by subtracting used ones
+        unused_vehicles = list(all_vehicles - set(used_vehicles))
+
+        # Return a random one, or None if none are left
+        return random.choice(unused_vehicles) if unused_vehicles else None
+
+    def generate_random_state(available_vehicles, available_packages, positions, probability=0.7):
+        # Sort packages by ascending priority (priority 1 → 5)
+        sorted_package_ids = sorted(available_packages.keys(), key=lambda pid: available_packages[pid]["priority"])
+
+        for package_id in sorted_package_ids:
+            package = available_packages[package_id]
+            assigned = False
+
+            used_vehicle_ids = [vid for vid, v in available_vehicles.items() if v["size"] > 0]
+            all_vehicle_ids = list(available_vehicles.keys())
+            unused_vehicle_ids = list(set(all_vehicle_ids) - set(used_vehicle_ids))
+
+            # probability chance: try used vehicles
+            if random.random() < probability and used_vehicle_ids:
+                tries = 50
+                while tries > 0:
+                    vid = random.choice(used_vehicle_ids)
+                    vehicle = available_vehicles[vid]
+                    if vehicle["size"] + package["weight"] <= vehicle["capacity"]:
+                        vehicle["has_packages"].append(package_id)
+                        vehicle["size"] += package["weight"]
+                        assigned = True
+                        break
+                    tries -= 1
+
+            # (1- probability) chance: try unused vehicles
+            if not assigned:
+                tries = 50
+                while tries > 0 and unused_vehicle_ids:
+                    vid = random.choice(unused_vehicle_ids)
+                    # Initialize if not yet present
+                    available_vehicles[vid] = {
+                        "capacity": int(vehicles.loc[vehicles['vehicle_id'] == vid].iloc[0]["capacity"]),
+                        "size": 0,
+                        "is_available": True,
+                        "has_packages": [],
+                        "path": []
+                    }
+                    vehicle = available_vehicles[vid]
+                    if vehicle["size"] + package["weight"] <= vehicle["capacity"]:
+                        vehicle["has_packages"].append(package_id)
+                        vehicle["size"] += package["weight"]
+                        assigned = True
+                        break
+                    else:
+                        unused_vehicle_ids.remove(vid)
+                    tries -= 1
+
+            if not assigned:
+                return False
+        create_tours(available_vehicles, available_packages, positions)
+        return True
+
+    def assign_package_probabilistically(packages_ids, chromosome_vehicles, available_packages,
+                                         num_of_vehicles, positions, probability=0.7):
+        # chromosome_vehicles: child["representation"]
+
+        # === Sort package_ids based in priorities ===
+        packages_ids.sort(key=lambda pid: available_packages[pid]["priority"])
+
+        for package_id in packages_ids:
+            package = available_packages[package_id]
+            assigned = False
+            used_vehicle_ids = list(chromosome_vehicles.keys())
+            all_vehicle_ids = [f"v{i}" for i in range(1, num_of_vehicles + 1)]
+            unused_vehicle_ids = list(set(all_vehicle_ids) - set(used_vehicle_ids))
+            # probability chance: try used vehicles
+            if random.random() < probability and used_vehicle_ids:
+                tries = 50
+                while tries > 0:
+                    vid = random.choice(used_vehicle_ids)
+                    vehicle = chromosome_vehicles[vid]
+                    if vehicle["size"] + package["weight"] <= vehicle["capacity"]:
+                        vehicle["has_packages"].append(package_id)
+                        vehicle["size"] += package["weight"]
+                        create_single_tour(vehicle, available_packages, positions)
+                        assigned = True
+                        break
+                    tries -= 1
+
+            # (1- probability) chance: try unused vehicles
+            if not assigned:
+                tries = 50
+                while tries > 0 and unused_vehicle_ids:
+                    vid = random.choice(unused_vehicle_ids)
+                    # Initialize if not yet present
+                    chromosome_vehicles[vid] = {
+                        "capacity": int(vehicles.loc[vehicles['vehicle_id'] == vid].iloc[0]["capacity"]),
+                        "size": 0,
+                        "is_available": True,
+                        "has_packages": [],
+                        "path": []
+                    }
+                    vehicle = chromosome_vehicles[vid]
+                    if vehicle["size"] + package["weight"] <= vehicle["capacity"]:
+                        vehicle["has_packages"].append(package_id)
+                        vehicle["size"] += package["weight"]
+                        create_single_tour(vehicle, available_packages, positions)
+                        assigned = True
+                        break
+                    else:
+                        unused_vehicle_ids.remove(vid)
+                    tries -= 1
+
+            # Final fallback: sequential assignment
+            if not assigned:
+                random.shuffle(all_vehicle_ids)
+                for vid in all_vehicle_ids:
+                    if vid not in chromosome_vehicles:
+                        chromosome_vehicles[vid] = {
+                            "capacity": int(vehicles.loc[vehicles['vehicle_id'] == vid].iloc[0]["capacity"]),
+                            "size": 0,
+                            "is_available": True,
+                            "has_packages": [],
+                            "path": []
+                        }
+                    vehicle = chromosome_vehicles[vid]
+                    if vehicle["size"] + package["weight"] <= vehicle["capacity"]:
+                        vehicle["has_packages"].append(package_id)
+                        vehicle["size"] += package["weight"]
+                        create_single_tour(vehicle, available_packages, positions)
+                        assigned = True
+                        break
+
+            if not assigned:
+                return False
+        return True
+
+    def mutate(child):
+        pm_route = 0.8
+        pm_swap = 0.5
+        if random.random() < pm_route:
+            v = random.choice(list(child["representation"].values()))
+            create_single_tour(v, available_packages, positions)
+        if random.random() < pm_swap and len(child["representation"]) > 1:
+            v1, v2 = random.sample(list(child["representation"].values()), 2)
+            if v1["has_packages"] and v2["has_packages"]:
+                p1 = random.choice(v1["has_packages"])
+                p2 = random.choice(v2["has_packages"])
+                w1 = available_packages[p1]["weight"]
+                w2 = available_packages[p2]["weight"]
+                if v1["size"] - w1 + w2 <= v1["capacity"] and v2["size"] - w2 + w1 <= v2["capacity"]:
+                    v1["has_packages"].remove(p1);
+                    v2["has_packages"].remove(p2)
+                    v1["has_packages"].append(p2);
+                    v2["has_packages"].append(p1)
+                    v1["size"] += w2 - w1;
+                    v2["size"] += w1 - w2
+                    create_single_tour(v1, available_packages, positions)
+                    create_single_tour(v2, available_packages, positions)
+
+    def crossover(parent1, parent2, available_packages, positions):
+
+        def remove_packages(child, packages_to_remove, available_packages, positions):
+            for vehicle in child["representation"].values():
+                original_len = len(vehicle["has_packages"])
+                new_package_list = []
+                new_size = 0
+                for p in vehicle["has_packages"]:
+                    if p not in packages_to_remove:
+                        new_package_list.append(p)
+                        new_size += available_packages[p]["weight"]
+                vehicle["has_packages"] = new_package_list
+                vehicle["size"] = new_size
+
+                # Only recreate tour if some packages were removed
+                if len(new_package_list) < original_len:
+                    create_single_tour(vehicle, available_packages, positions)
+
+        child1 = copy.deepcopy(parent1)
+        child2 = copy.deepcopy(parent2)
+
+        vehicles1 = list(child1["representation"].keys())  # list of vehicles used in Chro_1 , ex: [v1,v4, v5]
+        vehicles2 = list(child2["representation"].keys())  # list of vehicles used in Chro_2
+
+        if not vehicles1 or not vehicles2:
+            return child1, child2
+
+        # Choose num of rounds (at each round, choose two vehicles and swap their packages)
+        rounds = random.randint(1, min(len(vehicles1), len(vehicles2)))
+        for i in range(rounds):
+            v1_rand = random.choice(vehicles1)  # select random vehicle from chro_1 , ex: 'v1'
+            v2_rand = random.choice(vehicles2)  # select random vehicle from chro_1
+
+            packages_v1 = child1["representation"][v1_rand]["has_packages"]  # all packages in vehicle v1_rand
+            packages_v2 = child2["representation"][v2_rand]["has_packages"]  # all packages in vehicle v2_rand
+
+            # Define packages that should be added to each chromosom again
+            packages_for_child1 = list(set(packages_v1 + packages_v2))
+            packages_for_child2 = packages_for_child1.copy()
+
+            remove_packages(child1, packages_v2, available_packages,
+                            positions)  # remove packages that were in v2_rand from child1 (they will be inserted to a vehicle v1_rand)
+            remove_packages(child2, packages_v1, available_packages, positions)
+
+            # Remove packages from v1_rand and v2_rand (they will be reassigned later)
+
+            vehicle1 = child1["representation"][v1_rand]
+            vehicle1["has_packages"] = []
+            vehicle1["size"] = 0
+            # Now try to insert packages_v2 into vehicle1 in chro_1
+            for package_id in packages_v2:
+                package = available_packages[package_id]
+                if vehicle1["size"] + package["weight"] <= vehicle1["capacity"]:
+                    vehicle1["size"] += package["weight"]
+                    vehicle1["has_packages"].append(package_id)
+                    packages_for_child1.remove(package_id)
+                    create_single_tour(vehicle1, available_packages, positions)
+                    # Now, packages_for_child1 have packages that haven't been assigned (they will be added later)
+
+            vehicle2 = child2["representation"][v2_rand]
+            vehicle2["has_packages"] = []
+            vehicle2["size"] = 0
+            # Now try to insert packages_v1 into vehicle2 in chro_2
+            for package_id in packages_v1:
+                package = available_packages[package_id]
+                if vehicle2["size"] + package["weight"] <= vehicle2["capacity"]:
+                    vehicle2["size"] += package["weight"]
+                    vehicle2["has_packages"].append(package_id)
+                    packages_for_child2.remove(package_id)
+                    create_single_tour(vehicle2, available_packages, positions)
+                    # Now, temp_packages1 could have packages couldn't be assigned (they will be added later)
+
+            # Now, (packages_v1, temp_packages2) should be added randomly to chromosom1
+            bool_1 = assign_package_probabilistically(packages_for_child1, child1["representation"], available_packages,
+                                                      num_of_vehicles, positions)
+
+            # Now, (packages_v2, temp_packages1) should be added randomly to chromosom1
+            bool_2 = assign_package_probabilistically(packages_for_child2, child2["representation"], available_packages,
+                                                      num_of_vehicles, positions)
+
+            if not bool_1 or not bool_2:
+                return parent1, parent2  # invlid crossover
+
+        # Step 5: Mutate
+        def mutate(child, pm_route=0.6, pm_swap=0.3):
+            # route shuffle
+            if random.random() < pm_route:
+                v = random.choice(list(child["representation"].values()))
+                create_single_tour(v, available_packages, positions)
+
+            # cross-vehicle package swap
+            if random.random() < pm_swap and len(child["representation"]) > 1:
+                v1, v2 = random.sample(list(child["representation"].values()), 2)
+                if v1["has_packages"] and v2["has_packages"]:
+                    p1 = random.choice(v1["has_packages"])
+                    p2 = random.choice(v2["has_packages"])
+                    # capacity check
+                    if (v1["size"] - available_packages[p1]["weight"] + available_packages[p2]["weight"] <= v1[
+                        "capacity"]
+                            and
+                            v2["size"] - available_packages[p2]["weight"] + available_packages[p1]["weight"] <= v2[
+                                "capacity"]):
+                        v1["has_packages"].remove(p1)
+                        v2["has_packages"].remove(p2)
+                        v1["has_packages"].append(p2)
+                        v2["has_packages"].append(p1)
+                        v1["size"] += available_packages[p2]["weight"] - available_packages[p1]["weight"]
+                        v2["size"] += available_packages[p1]["weight"] - available_packages[p2]["weight"]
+                        create_single_tour(v1, available_packages, positions)
+                        create_single_tour(v2, available_packages, positions)
+
+        mutate(child1)
+        mutate(child2)
+
+        # re-run nn_tour on every vehicle in each child
+        for v in child1["representation"].values():  # added
+            create_single_tour(v, available_packages, positions)  # added
+        for v in child2["representation"].values():  # added
+            create_single_tour(v, available_packages, positions)  # added
+
+        # Step 6: Evaluate fitness
+        child1["fitness"] = evaluate_fitness(child1["representation"], available_packages)
+        child2["fitness"] = evaluate_fitness(child2["representation"], available_packages)
+
+        # Step 7: Remove empty vehicles
+        child1["representation"] = {vid: v for vid, v in child1["representation"].items() if v["size"] > 0}
+        child2["representation"] = {vid: v for vid, v in child2["representation"].items() if v["size"] > 0}
+
+        return child1, child2
+
+    # converting into dicts with a specific format
+    make_valid_packages()
+    available_packages = {
+        row['package_id']: {
+            'dest_x': row['dest_x'],
+            'dest_y': row['dest_y'],
+            'weight': row['weight'],
+            'priority': row['priority'],
+        }
+        for _, row in packages[packages["is_delivered"] == True].iterrows()
+    }
+
+    available_vehicles = {
+        row['vehicle_id']: {
+            'capacity': row['capacity'],
+            'size': 0,  # filled capacity
+            'is_available': row['is_available'],
+            'has_packages': [],  # empty: having no packages so far
+            'path': []  # having no path: this vehicle hasn't been used yet
+        }
+        for _, row in vehicles[vehicles["is_available"] == True].iterrows()
+    }
+
+
+    population = {
+
+    }
+    # positions will be represented as letters (starting from 'a' to 'z' then 'A' to 'Z')
+    last_position = "a"  # last used position, then 'b' is available
+    positions = {
+        "a": {"dest_x": 0, "dest_y": 0}  # the origin
+        # other positions will be added later
+    }
+
+    # Then to add all desired destinations, without repeition
+    for package in available_packages.values():
+        temp = {"dest_x": package["dest_x"], "dest_y": package["dest_y"]}
+        if temp not in positions.values():  # new destination
+            last_position = next_letter(last_position)
+            positions[f"{last_position}"] = temp
+            package["position"] = last_position
+            if last_position == 'Z':
+                print("The system can't add new positions..!")
+                break
+
+        else:  # it is a repeated destination (already stored)
+            package["position"] = str([k for k, v in positions.items() if v == temp][0])
+
+    num_of_vehicles = len(available_vehicles)
+    num_of_packages = len(available_packages)
+    used_vehicles = 0
+
+    # Then, to generate random (initial) population
+    population_size = 0
+    while population_size < 100:
+        # reset info.
+        empty_vehicles(available_vehicles)
+        used_vehicles = 0
+
+        # randomly, put packages in random vehicles
+        generate_random_state(available_vehicles, available_packages, positions)
+        # Now, all packages have been assigned to vehicles randomly
+
+        # Then, to create a random tour (using possible permutaions) for each vehicle
+        # All vehicles should start and end with the origin (position 'a')
+
+        # Then to represnt this state as a chromosom, and to add it to the population
+        validity = add_chromosom(population, available_vehicles, available_packages)
+        if validity > 0:
+            population_size += 1
+
+    ### CROSS-OVER
+    # Up to here, the initial population is generated. Then to start Crossover- and Mutation- stage
+
+    num_of_generations = 500
+    for i in range(num_of_generations):
+        # First: Track the elite
+        elite_key, elite = min(population.items(), key=lambda kv: kv[1]["fitness"])
+        elite_copy = copy.deepcopy(elite)
+
+        # First, parents will be selected based on "Fitness-Proportionate Selection"
+        parents_indices = select_chromosoms(population)
+        parent1 = population[f"chromosom_" + str(parents_indices[0])]
+        parent2 = population[f"chromosom_" + str(parents_indices[1])]
+
+        # Do the crossover between the randomly selected parents
+        child1, child2 = crossover(parent1, parent2, available_packages, positions)
+
+        # Overwrite the parents with the children
+        population[f"chromosom_{parents_indices[0]}"] = child1
+        population[f"chromosom_{parents_indices[1]}"] = child2
+
+        # Elitism enforcement
+        worst_key = max(population.items(), key=lambda kv: kv[1]["fitness"])[0]  # added
+        population[worst_key] = elite_copy  # added
+
+    # Find best chromosome
+    best_chromosome = min(population.values(), key=lambda chromo: chromo["fitness"])
+
+    output_format = {}
+    for vid, vehicle in best_chromosome["representation"].items():
+        seq = [(0, 0, 0, 0)]  # depot as (x=0,y=0,weight=0,priority=0)
+        for pid in vehicle["has_packages"]:
+            pkg = available_packages[pid]
+            seq.append((pkg["dest_x"], pkg["dest_y"], pkg["weight"], pkg["priority"]))
+        output_format[vid] = seq
+    print(output_format)
+
+    # print("Total cost= ", evaluate_tours_costs(best_chromosome["representation"], available_packages))
+    return output_format
+
 import math
 
 def visualize_routes_pysimplegui(state):
@@ -745,7 +1339,8 @@ def main():
             else:
                 # Run Simulated Annealing
 
-                final_state = calculate_minimum_sa()
+                # final_state = calculate_minimum_sa()
+                final_state = GA()
                 if final_state is None:
                     sg.popup("⚠️ there's no packages that can be delivered, or there's only one pack", title='Error', background_color='#1E1E1E')
                 else:
