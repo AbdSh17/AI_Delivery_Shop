@@ -23,7 +23,7 @@ class SA:
 
 class GA:
     # ====================== GA ======================
-    RE_INITIATE_EPOCHS = 10
+    RE_INITIATE_EPOCHS = 15
     # ====================== GA ======================
 
 # ============================ Dark Violet Theme ============================
@@ -689,12 +689,9 @@ def GAK():
                 for pid in vehicle["has_packages"]:
                     pkg = available_packages[pid]
                     if pkg["position"] == b:
-                        if SA.PRIORITY_RATIO < 0.7:
-                            priority_ratio = 0.7
-                        else:
-                            priority_ratio = SA.PRIORITY_RATIO
-                        path_prioritization += (1 / pkg["priority"]) * priority_ratio * path_cost
+                        path_prioritization += (1 / pkg["priority"]) * max(0.7, SA.PRIORITY_RATIO) * path_cost
             fitness += path_cost + path_prioritization
+
 
         if fitness <= 0:
             return -1
@@ -1166,6 +1163,7 @@ def GAK():
 
     # print("Total cost= ", evaluate_tours_costs(best_chromosome["representation"], available_packages))
     best_chromosome = to_output_form(best_chromosome)
+
     return best_chromosome, objective_function(best_chromosome)
 
 def calculate_minimum_ga():
@@ -1283,6 +1281,58 @@ def visualize_routes_pysimplegui(state):
             break
     window.close()
 
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+def visualize_packages(packages_df):
+    fig, ax = plt.subplots(figsize=(8, 6))
+    fig.subplots_adjust(left=0.07, right=0.97, top=0.93, bottom=0.07)  # tighter layout
+
+    ax.set_facecolor('#1E1E1E')
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+
+    # Draw grid and axes
+    ax.set_xlabel("X", color='white')
+    ax.set_ylabel("Y", color='white')
+    ax.tick_params(axis='both', colors='white')
+    ax.grid(True, linestyle='--', alpha=0.3)
+
+    # Draw packages
+    for _, row in packages_df.iterrows():
+        x, y = row['dest_x'], row['dest_y']
+        weight = row['weight']
+        priority = row['priority']
+        ax.plot(x, y, 'o', color='#720e9e')
+        ax.text(x + 1, y + 1, f"{weight}kg (P{priority})", fontsize=8, color='white')
+
+    ax.set_title("Package Map", color='white', fontsize=10, pad=5)
+
+    layout = [
+        [sg.Canvas(key='-CANVAS-', expand_x=True, expand_y=True)],
+        [sg.Button("Close", size=(8, 1), pad=(5, 5))]
+    ]
+
+    window = sg.Window("📦 Packages Map", layout,
+                       size=(800, 600),
+                       resizable=False,
+                       finalize=True,
+                       background_color='#1E1E1E',
+                       element_padding=(0, 0))
+
+    canvas_elem = window['-CANVAS-']
+    canvas = FigureCanvasTkAgg(fig, canvas_elem.Widget)
+    canvas.draw()
+    canvas.get_tk_widget().pack(side='top', fill='both', expand=True)
+
+    while True:
+        event, _ = window.read()
+        if event in (sg.WIN_CLOSED, "Close"):
+            break
+
+    window.close()
+    plt.close(fig)
+
 def main():
 
     global packages, vehicles, all_packages
@@ -1328,6 +1378,7 @@ def main():
                     [sg.Text('Priority Ratio (%):', size=(15, 1), justification='right'),
                      sg.Slider(range=(0, 100), default_value=int(SA.PRIORITY_RATIO * 10), resolution=1,
                                orientation='h', size=(20, 15), key='-PRIORITY-RATIO-SLIDER-')],
+                    [sg.Button('🔍 Visualize Packages', size=(43, 2))]
                 ], title_color='#E0E0E0', background_color='#1E1E1E',
                           element_justification='center', pad=(15, 15), border_width=1)],
             ], justification='center', element_justification='center')],
@@ -1404,8 +1455,6 @@ def main():
             if packages.empty or vehicles.empty:
                 sg.popup('⚠️ Please add packages and vehicles first!', title='Error', background_color='#1E1E1E')
             else:
-                # Run Simulated Annealing
-
                 try:
                     final_state = calculate_minimum_sa()
                 except Exception:
@@ -1436,7 +1485,6 @@ def main():
                     final_state, _ = calculate_minimum_ga()
                 except Exception:
                     final_state = None
-                # final_state = calculate_minimum_ga()
                 if final_state is None:
                     sg.popup("⚠️ there's no packages that can be delivered, or there's only one pack", title='Error', background_color='#1E1E1E')
                 else:
@@ -1446,6 +1494,16 @@ def main():
                     sg.popup(f'✅ Optimization Complete! Total Distance: {objective_function(final_state)[1]:.2f} km',
                              title='Result', background_color='#1E1E1E')
 
+        elif event == '🔍 Visualize Packages':
+            packages = pd.read_csv('packages.csv')
+            if not packages.empty:
+                state = {
+                    'v1': [(0, 0, 0, 0)] + [(row.dest_x, row.dest_y, row.priority, row.weight)
+                                           for row in packages.itertuples(index=False)]
+                }
+                visualize_packages(packages)
+            else:
+                sg.popup('⚠️ No packages available to visualize!', title='Info', background_color='#1E1E1E')
 
     window.close()
 
