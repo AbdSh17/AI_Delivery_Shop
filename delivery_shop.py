@@ -7,17 +7,24 @@ import random
 import time
 
 
-class Constants:
+class SA:
+    # ====================== SA ======================
     TEMPERATURE = 1000
     COOLING_RATE = 0.99
     STOPPING_TEMPERATURE = 1
     EPOCHS = 1000
-    PRIORITY_RATIO = 0.5
+    PRIORITY_RATIO = 0.0
     RE_INITIATE_EPOCHS = 10
-    DRAW_SLEEP_TIME = 0.4
 
     SWAP_IN_SAME_VEHICLE, SWAP_IN_DIFFERENT_VEHICLE, MOVE_TO_DIFFERENT_VEHICLE = [0], [1], [2]
+    # ====================== SA ======================
 
+    DRAW_SLEEP_TIME = 0.4
+
+class GA:
+    # ====================== GA ======================
+    RE_INITIATE_EPOCHS = 10
+    # ====================== GA ======================
 
 # ============================ Dark Violet Theme ============================
 dark_violet_theme = {
@@ -207,9 +214,6 @@ def drop_vehicle():
 
     window.close()
 
-def calculate_ga():
-    pass
-
 def calculate_distance(x1, y1, x2, y2):
     return (((x2 - x1) ** 2) + ((y2 - y1) ** 2)) ** 0.5
 
@@ -223,10 +227,10 @@ def objective_function(state):
         x1, x2, first_epoch = 0, 0, True
 
         van_priority = 0
-        for pack in state[van][1::]:
+        for pack in state[van][1:]:
 
             van_distance += (calculate_distance(x1, x2, pack[0], pack[1]))
-            van_priority += ((Constants.PRIORITY_RATIO / (pack[2])) * van_distance)
+            van_priority += ((SA.PRIORITY_RATIO / (pack[2])) * van_distance)
             x1, x2 = pack[0], pack[1]
 
         total_distance += (van_priority + van_distance)
@@ -274,6 +278,8 @@ def make_valid_packages():
 def random_next_state(state, weights_state):
 
     new_state = copy.deepcopy(state) # Deep Cloning
+    new_weights_state = copy.deepcopy(weights_state)
+
     choices = 3 # Either Switch between packs in the same vehicle or switch in other vehicles
     switching_method = random.randint(0, choices - 1)
 
@@ -289,12 +295,12 @@ def random_next_state(state, weights_state):
         exit(1)
 
     if number_of_vehicles == 1:
-        switching_method = Constants.SWAP_IN_SAME_VEHICLE[0]
+        switching_method = SA.SWAP_IN_SAME_VEHICLE[0]
 
     found_vehicle1, found_vehicle2 = False, True
 
     # if no vehicle with more than one location than option 2 (can't SWAP_IN_SAME_VEHICLE)
-    if switching_method in Constants.SWAP_IN_SAME_VEHICLE:
+    if switching_method in SA.SWAP_IN_SAME_VEHICLE:
 
         for i in range(number_of_vehicles):
             vid = vehicles.iloc[i]["vehicle_id"]
@@ -303,10 +309,10 @@ def random_next_state(state, weights_state):
                 break
 
         if not found_vehicle1:
-            switching_method = Constants.SWAP_IN_DIFFERENT_VEHICLE[0]
+            switching_method = SA.SWAP_IN_DIFFERENT_VEHICLE[0]
 
     # if all the packs are in the same vehicle (can't SWAP_IN_different_VEHICLE)
-    if switching_method in Constants.SWAP_IN_DIFFERENT_VEHICLE:
+    if switching_method in SA.SWAP_IN_DIFFERENT_VEHICLE:
         for i in range(number_of_vehicles):
             vid = vehicles.iloc[i]["vehicle_id"]
             if len(new_state[f"{vid}"]) - 1== number_of_all_packs:
@@ -314,11 +320,11 @@ def random_next_state(state, weights_state):
                 break
 
         if not found_vehicle2:
-            switching_method = Constants.SWAP_IN_SAME_VEHICLE[0]
+            switching_method = SA.SWAP_IN_SAME_VEHICLE[0]
 
     package1_number, package2_number, vehicle1_number, vehicle2_number, package_number = 0, 0, 0, 0, 0
 
-    if switching_method in Constants.SWAP_IN_SAME_VEHICLE:
+    if switching_method in SA.SWAP_IN_SAME_VEHICLE:
         # ===== Random vehicle ======
         while True:
             vehicle_number = int(random.random() * number_of_vehicles)
@@ -343,7 +349,7 @@ def random_next_state(state, weights_state):
             new_state[f"{vid}"][package2_number] = temp_new_state
             # ==== Swap ====
 
-    if switching_method in Constants.SWAP_IN_DIFFERENT_VEHICLE:
+    if switching_method in SA.SWAP_IN_DIFFERENT_VEHICLE:
 
         max_iterations = 0
         while True:
@@ -363,18 +369,19 @@ def random_next_state(state, weights_state):
                 continue
 
             # check if the weights are legal
-            if  weights_state[f"{vid1}"][0] >= (weights_state[f"{vid1}"][1] + new_state[f"{vid2}"][package2_number][3])\
-                and weights_state[f"{vid2}"][0] >= (weights_state[f"{vid2}"][1] + new_state[f"{vid1}"][package1_number][3]):
-                weights_state[f"{vid1}"][1] -= new_state[f"{vid1}"][package1_number][3]
-                weights_state[f"{vid1}"][1] += new_state[f"{vid2}"][package2_number][3]
+            if  new_weights_state[f"{vid1}"][0] >= (new_weights_state[f"{vid1}"][1] + new_state[f"{vid2}"][package2_number][3])\
+                and new_weights_state[f"{vid2}"][0] >= (new_weights_state[f"{vid2}"][1] + new_state[f"{vid1}"][package1_number][3]):
 
-                weights_state[f"{vid2}"][1] -= new_state[f"{vid2}"][package2_number][3]
-                weights_state[f"{vid2}"][1] += new_state[f"{vid1}"][package1_number][3]
+                new_weights_state[f"{vid1}"][1] -= new_state[f"{vid1}"][package1_number][3]
+                new_weights_state[f"{vid1}"][1] += new_state[f"{vid2}"][package2_number][3]
+
+                new_weights_state[f"{vid2}"][1] -= new_state[f"{vid2}"][package2_number][3]
+                new_weights_state[f"{vid2}"][1] += new_state[f"{vid1}"][package1_number][3]
                 break
 
             max_iterations += 1
             if max_iterations == number_of_vehicles * 4:
-                return None
+                return None, None
 
         # ==== Swap ====
         temp_new_state = new_state[f"{vid1}"][package1_number]
@@ -382,7 +389,7 @@ def random_next_state(state, weights_state):
         new_state[f"{vid2}"][package2_number] = temp_new_state
         # ==== Swap ====
 
-    if switching_method in Constants.MOVE_TO_DIFFERENT_VEHICLE:
+    if switching_method in SA.MOVE_TO_DIFFERENT_VEHICLE:
         max_iterations = 0
         while True:
             # ===== Random two vehicles =====
@@ -401,14 +408,14 @@ def random_next_state(state, weights_state):
                 continue
 
                 # check if the weights are legal (V2 Capacity > Current V2 + New Package Weight
-            if weights_state[f"{vid2}"][0] >= (weights_state[f"{vid2}"][1] + new_state[f"{vid1}"][package_number][3]):
-                weights_state[f"{vid1}"][1] -= new_state[f"{vid1}"][package_number][3]
-                weights_state[f"{vid2}"][1] += new_state[f"{vid1}"][package_number][3]
+            if new_weights_state[f"{vid2}"][0] >= (new_weights_state[f"{vid2}"][1] + new_state[f"{vid1}"][package_number][3]):
+                new_weights_state[f"{vid1}"][1] -= new_state[f"{vid1}"][package_number][3]
+                new_weights_state[f"{vid2}"][1] += new_state[f"{vid1}"][package_number][3]
                 break
 
             max_iterations += 1
             if max_iterations == number_of_vehicles * 4:
-                return None
+                return None, None
 
         # ==== Move ====
         index_to_insert = random.randint(1, len(new_state[f"{vid2}"]))
@@ -416,7 +423,7 @@ def random_next_state(state, weights_state):
         new_state[f"{vid1}"].pop(package_number)  # Remove the pack from v1
         # ==== Move ====
 
-    return new_state
+    return new_state, new_weights_state
 
 def random_initial_state(state, weights_state):
     max_range = len(vehicles["vehicle_id"])  # range of random number to choose
@@ -442,39 +449,43 @@ def random_initial_state(state, weights_state):
 
 def calculate_sa(print_input):
     global packages
-    temp = Constants.TEMPERATURE # initial temp
-    epochs = Constants.EPOCHS # max number of epochs
-    cooling_rate = Constants.COOLING_RATE # temp *= cooling_rate (0.9 <= CR <= 0.99)
+    temp = SA.TEMPERATURE # initial temp
+    epochs = SA.EPOCHS # max number of epochs
+    cooling_rate = SA.COOLING_RATE # temp *= cooling_rate (0.9 <= CR <= 0.99)
 
-    initial_state = {} # empty state will be filled
-    initial_weights_state = {}
-    # copy_packages = packages.copy() # to drop packages
+    def sa_initial_state():
+        initial_state = {}  # empty state will be filled
+        initial_weights_state = {}
+        # copy_packages = packages.copy() # to drop packages
 
-    for vid in vehicles["vehicle_id"].values:
-        initial_state[vid] = [(0, 0, 0, 0)] # capacity
-        initial_weights_state[vid]  = [vehicles.loc[vehicles["vehicle_id"] == vid]["capacity"].values[0], 0]
+        for vid in vehicles["vehicle_id"].values:
+            initial_state[vid] = [(0, 0, 0, 0)]  # capacity
+            initial_weights_state[vid] = [vehicles.loc[vehicles["vehicle_id"] == vid]["capacity"].values[0], 0]
 
-    state = copy.deepcopy(initial_state)
-    weights_state = copy.deepcopy(initial_weights_state)
-    # loop will give each package to random vehicle until it works
-
-    print("entered")
-    while not random_initial_state(state, weights_state):
-        weights_state = copy.deepcopy(initial_weights_state)
         state = copy.deepcopy(initial_state)
-        continue
+        weights_state = copy.deepcopy(initial_weights_state)
+        # loop will give each package to random vehicle until it works
 
+        print("entered")
+        while not random_initial_state(state, weights_state):
+            weights_state = copy.deepcopy(initial_weights_state)
+            state = copy.deepcopy(initial_state)
+            continue
+
+        return state, weights_state
+
+    state, weights_state = sa_initial_state()
     if print_input:
         print(state)
         print(weights_state)
 
 
     for i in range(epochs):
-
         if temp <= 1:
             break
 
-        next_state = random_next_state(state, weights_state)
+        next_state, next_weight_state = random_next_state(state, weights_state)
+
 
         if next_state is None: # if the assignation FAILED, retry another random
             continue
@@ -493,18 +504,22 @@ def calculate_sa(print_input):
 
         if delta_e < 0:
             state = next_state
+            weights_state = next_weight_state
         else:
             odds = math.exp(-delta_e / temp) # - delta because i want to minimise
             random_choose = random.random()
             if random_choose < odds:
                 state = next_state
+                weights_state = next_weight_state
 
         temp *= cooling_rate
 
     #
     # print("Final State:", state)
     # print("Final Objective Value:", objective_function(state))
-    return state, objective_function(state)
+    print(state)
+    print(weights_state)
+    return state, objective_function(state), weights_state
 
 def calculate_minimum_sa():
 
@@ -532,17 +547,19 @@ def calculate_minimum_sa():
         return None
 
 
-    print(Constants.PRIORITY_RATIO)
-    minimum_state, minimum_objective = calculate_sa(True)
-    for _ in range(Constants.RE_INITIATE_EPOCHS):
-        new_state, new_objective = calculate_sa(False)
+    print(SA.PRIORITY_RATIO)
+    minimum_state, minimum_objective, _ = calculate_sa(True)
+    weight = {}
+    for _ in range(SA.RE_INITIATE_EPOCHS):
+        new_state, new_objective, weight_state = calculate_sa(False)
         if minimum_objective[0] > new_objective[0]:
-            minimum_state, minimum_objective = new_state, new_objective
+            minimum_state, minimum_objective, weight = new_state, new_objective, weight_state
 
     print(minimum_state)
+    print(weight)
     return minimum_state
 
-def GA():
+def GAK():
     def next_letter(letter: chr) -> chr:
         # this function increment the last_position used, a,b,... z, A, B, ..., Z
         if letter >= 'a' and letter < 'z':
@@ -672,7 +689,11 @@ def GA():
                 for pid in vehicle["has_packages"]:
                     pkg = available_packages[pid]
                     if pkg["position"] == b:
-                        path_prioritization += (1 / pkg["priority"]) * 2 * path_cost
+                        if SA.PRIORITY_RATIO < 0.7:
+                            priority_ratio = 0.7
+                        else:
+                            priority_ratio = SA.PRIORITY_RATIO
+                        path_prioritization += (1 / pkg["priority"]) * priority_ratio * path_cost
             fitness += path_cost + path_prioritization
 
         if fitness <= 0:
@@ -1028,8 +1049,22 @@ def GA():
 
         return child1, child2
 
+    def to_output_form(best_chromosome):
+        output_format = {}
+        for vid, vehicle in best_chromosome["representation"].items():
+            seq = [(0, 0, 0, 0)]  # depot as (x=0,y=0,weight=0,priority=0)
+            for pid in vehicle["has_packages"]:
+                pkg = available_packages[pid]
+                seq.append((pkg["dest_x"], pkg["dest_y"], pkg["priority"], pkg["weight"]))
+            output_format[vid] = seq
+
+        for vid in vehicles["vehicle_id"]:
+            if vid not in output_format.keys():
+                output_format[vid] = [(0,0,0,0)]
+
+        return output_format
     # converting into dicts with a specific format
-    make_valid_packages()
+
     available_packages = {
         row['package_id']: {
             'dest_x': row['dest_x'],
@@ -1127,17 +1162,43 @@ def GA():
     # Find best chromosome
     best_chromosome = min(population.values(), key=lambda chromo: chromo["fitness"])
 
-    output_format = {}
-    for vid, vehicle in best_chromosome["representation"].items():
-        seq = [(0, 0, 0, 0)]  # depot as (x=0,y=0,weight=0,priority=0)
-        for pid in vehicle["has_packages"]:
-            pkg = available_packages[pid]
-            seq.append((pkg["dest_x"], pkg["dest_y"], pkg["weight"], pkg["priority"]))
-        output_format[vid] = seq
-    print(output_format)
+    print(to_output_form(best_chromosome))
 
     # print("Total cost= ", evaluate_tours_costs(best_chromosome["representation"], available_packages))
-    return output_format
+    best_chromosome = to_output_form(best_chromosome)
+    return best_chromosome, objective_function(best_chromosome)
+
+def calculate_minimum_ga():
+    make_valid_packages()
+
+    global packages, vehicles, all_packages
+
+    number_of_vehicles = len(vehicles["vehicle_id"])
+    number_of_all_packs = len(packages["package_id"])
+
+    if number_of_all_packs <= 1:
+        print("Just one pack")
+        packages = pd.read_csv('packages.csv')
+        vehicles = pd.read_csv('vehicles.csv')
+        all_packages = packages.copy()
+        return None
+
+    if number_of_vehicles == 0:
+        print("No vehicles")
+        packages = pd.read_csv('packages.csv')
+        vehicles = pd.read_csv('vehicles.csv')
+        all_packages = packages.copy()
+        return None
+
+
+    current_chromosome, current_objective = GAK()
+    for i in range(GA.RE_INITIATE_EPOCHS):
+        next_chromosome, next_objective = GAK()
+        if current_objective > next_objective:
+            current_objective = next_objective
+            current_chromosome = next_chromosome
+
+    return current_chromosome, current_objective
 
 import math
 
@@ -1161,7 +1222,13 @@ def visualize_routes_pysimplegui(state):
     graph.DrawText('Shop', (0, 0), color='black', font=('Arial Bold', 10), text_location=sg.TEXT_LOCATION_BOTTOM_LEFT)
 
     # Legend: map each vehicle ID to its color (top-right)
-    colors = ['#FF5733', '#33FF57', '#3357FF', '#F3FF33']
+    colors = [
+        '#720e9e',  # primary
+        '#00FFFF',  # cyan as second option
+        '#33FF57', '#3357FF', '#F3FF33',
+        '#FF33A8', '#33FFF9', '#A833FF', '#FF8F33',
+        '#33FF8F', '#8F33FF'
+    ]
     legend_x, legend_y = 90, 95  # position near top-right
     for idx, vid in enumerate(state.keys()):
         col = colors[idx % len(colors)]
@@ -1200,7 +1267,7 @@ def visualize_routes_pysimplegui(state):
                 # Draw line to this stop (behind the van)
                 graph.DrawLine(prev_pt, curr_pt, color=color, width=2)
                 window.refresh()
-                time.sleep(Constants.DRAW_SLEEP_TIME)
+                time.sleep(SA.DRAW_SLEEP_TIME)
 
             prev_pt = curr_pt
 
@@ -1259,7 +1326,7 @@ def main():
                 # Priority Ratio Slider Frame
                 [sg.Frame('⚖️ Priority Settings', [
                     [sg.Text('Priority Ratio (%):', size=(15, 1), justification='right'),
-                     sg.Slider(range=(0, 100), default_value=int(Constants.PRIORITY_RATIO * 10), resolution=1,
+                     sg.Slider(range=(0, 100), default_value=int(SA.PRIORITY_RATIO * 10), resolution=1,
                                orientation='h', size=(20, 15), key='-PRIORITY-RATIO-SLIDER-')],
                 ], title_color='#E0E0E0', background_color='#1E1E1E',
                           element_justification='center', pad=(15, 15), border_width=1)],
@@ -1333,14 +1400,18 @@ def main():
             all_packages = packages.copy()
 
             # Update PRIORITY_RATIO based on slider value (map 0–100 to 0–10)
-            Constants.PRIORITY_RATIO = values['-PRIORITY-RATIO-SLIDER-'] / 10
+            SA.PRIORITY_RATIO = values['-PRIORITY-RATIO-SLIDER-'] / 10
             if packages.empty or vehicles.empty:
                 sg.popup('⚠️ Please add packages and vehicles first!', title='Error', background_color='#1E1E1E')
             else:
                 # Run Simulated Annealing
 
-                # final_state = calculate_minimum_sa()
-                final_state = GA()
+                try:
+                    final_state = calculate_minimum_sa()
+                except Exception:
+                    final_state = None
+
+                print(final_state)
                 if final_state is None:
                     sg.popup("⚠️ there's no packages that can be delivered, or there's only one pack", title='Error', background_color='#1E1E1E')
                 else:
@@ -1351,10 +1422,33 @@ def main():
                              title='Result', background_color='#1E1E1E')
 
         elif event == '🧬 Genetic Algorithm (GA)':
-            calculate_ga()
+
+            packages = pd.read_csv('packages.csv')
+            vehicles = pd.read_csv('vehicles.csv')
+            all_packages = packages.copy()
+
+            # Update PRIORITY_RATIO based on slider value (map 0–100 to 0–10)
+            SA.PRIORITY_RATIO = values['-PRIORITY-RATIO-SLIDER-'] / 10
+            if packages.empty or vehicles.empty:
+                sg.popup('⚠️ Please add packages and vehicles first!', title='Error', background_color='#1E1E1E')
+            else:
+                try:
+                    final_state, _ = calculate_minimum_ga()
+                except Exception:
+                    final_state = None
+                # final_state = calculate_minimum_ga()
+                if final_state is None:
+                    sg.popup("⚠️ there's no packages that can be delivered, or there's only one pack", title='Error', background_color='#1E1E1E')
+                else:
+                    print("FINALLLL THING: ", objective_function(final_state)[0])
+                    print(final_state)
+                    visualize_routes_pysimplegui(final_state)
+                    sg.popup(f'✅ Optimization Complete! Total Distance: {objective_function(final_state)[1]:.2f} km',
+                             title='Result', background_color='#1E1E1E')
+
 
     window.close()
 
 if __name__ == '__main__':
     main()
-    # print(calculate_minimum_sa())
+    # print(objective_function(GAK()))
