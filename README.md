@@ -84,13 +84,6 @@ Where the next state were generated as the following:</br>
   - Some offspring are randomly selected for mutation.  
   - Mutation involves changing the tour (delivery route) of a randomly selected vehicle within the chromosome.
 
-- **Priority Handling:**  
-  Packages with higher priority are delivered first—unless doing so would significantly increase the total cost.
-
-- **Performance Note:**  
-  A higher number of generations typically leads to better solutions, but increases execution time.
-
-
 ---
 
 ## Test Samples
