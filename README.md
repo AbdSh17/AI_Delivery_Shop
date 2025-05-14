@@ -58,10 +58,38 @@ Where:
 ## Algorighims Used
 
 #### Simmulated Annealing - SA
-**...**
+Where the next state were generated as the following:</br>
+**Next State** The next state is generated randomly at each iteration by choosing one of the following methods:
+1.	Switching packages within the same vehicle – two random packages from a randomly selected vehicle are swapped. This introduces variation in the route. No weight check is needed in this case.
+2.	Swapping packages between two different vehicles – two random packages from two different vehicles are swapped. A weight constraint check is required.
+3.	Moving a package from one vehicle to another – one random package is moved from a source vehicle to a different target vehicle. A weight constraint check is required.
+
+
 
 #### Genetic Algorithm - GA
-**...**
+
+- **Chromosome (State):**  
+  A complete assignment of packages to vehicles. Each vehicle has its own route to deliver the assigned packages.
+
+- **Population:**  
+  A set of 100 randomly generated chromosomes.
+
+- **Crossover:**  
+  - Two parent chromosomes are selected.  
+  - A number of vehicles are randomly chosen from both parents.  
+  - For a fixed number of rounds (e.g., 5), randomly select a vehicle from each parent and swap their packages.  
+  - Remove duplicate packages and reconstruct the routes.
+
+- **Mutation:**  
+  - Some offspring are randomly selected for mutation.  
+  - Mutation involves changing the tour (delivery route) of a randomly selected vehicle within the chromosome.
+
+- **Priority Handling:**  
+  Packages with higher priority are delivered first—unless doing so would significantly increase the total cost.
+
+- **Performance Note:**  
+  A higher number of generations typically leads to better solutions, but increases execution time.
+
 
 ---
 
