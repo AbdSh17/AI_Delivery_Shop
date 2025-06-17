@@ -88,7 +88,7 @@ Where the next state were generated as the following:</br>
 
 ## Test Samples
 
-#### **...**
+You can see some of them in the report, until i add more here (:
 
 ---
 
